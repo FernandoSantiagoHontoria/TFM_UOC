@@ -1,0 +1,2079 @@
+---
+title: "Código del TFM del MSc de Bioinformática y Bioestadística"
+author: "Fernando Santiago Hontoria"
+date: "`r Sys.Date()`"
+output: html_document
+---
+Código empleado para la realización del trabajo final del máster de de Bioinformática y Bioestadística de la Universitat Oberta de Catalunya
+
+```{r Descarga de paquetes, echo = TRUE}
+if (!requireNamespace("BiocManager", quietly = TRUE)) install.packages("BiocManager")
+#BiocManager::install("TCGAbiolinks")
+#BiocManager::install(c("GSVA", "limma"))
+#BiocManager::install("GenomeInfoDbData")
+#BiocManager::install("clusterProfiler")
+#BiocManager::install("org.Hs.eg.db")
+#BiocManager::install("ReactomePA")
+#BiocManager::install("STRINGdb")
+
+
+if (!require("SummarizedExperiment", quietly = TRUE))
+  install.packages("SummarizedExperiment")
+if (!require("dplyr", quietly = TRUE))
+  install.packages("dplyr")
+if (!require("readxl", quietly = TRUE))
+  install.packages("readxl")
+if (!require("DT"))
+  install.packages('DT')
+if (!require("survival"))
+  install.packages('survival')
+if (!require("survminer"))
+  install.packages('survminer')
+if (!require("patchwork"))
+  install.packages('patchwork')
+if (!require("rlang"))
+  install.packages('rlang')
+if (!require("gridExtra"))
+  install.packages('gridExtra')
+if (!require("scales"))
+  install.packages('scales')
+if (!require("colorspace"))
+  install.packages('colorspace')
+if (!require("randomForest"))
+  install.packages('randomForest')
+if (!require("caret"))
+  install.packages('caret')
+if (!require("pROC"))
+  install.packages('pROC')
+if (!require("tibble"))
+  install.packages('tibble')
+if (!require("tidyr"))
+  install.packages('tidyr')
+if (!require("pheatmap"))
+  install.packages('pheatmap')
+if (!require("ReactomePA"))
+  install.packages('ReactomePA')
+
+
+```
+
+```{r llamada a libraries, echo = TRUE}
+library(dplyr)
+library(readxl)
+library(TCGAbiolinks)
+library(readr)
+library(stringr)
+library(DT)
+library(GSVA)
+library(limma)
+library(biomaRt)
+library(SummarizedExperiment)
+library(EDASeq)
+library(survival)
+library(ggplot2)
+library(survminer)
+library(patchwork)
+library(rlang)
+library(scales)
+library(colorspace)
+library(gridExtra)
+library(randomForest)
+library(caret)
+library(pROC)
+library(tibble)
+library(tidyr)
+library(pheatmap)
+library(clusterProfiler)
+library(org.Hs.eg.db)
+library(ReactomePA)
+library(STRINGdb)
+
+workingDir = getwd()
+dataDir = file.path(workingDir)
+```
+
+
+```{r Lectura de excel y selección de genes}
+
+#Lectura excel
+archivo_excel = "gene_lists_ES_immune.xlsx"
+immune_data = read_excel(archivo_excel, sheet = "Immune")
+es_benporath_data = read_excel(archivo_excel, sheet = "ES_Benporath")
+sc_signatures_data = read_excel(archivo_excel, sheet = "SC_signatures")
+
+# Extraer los nombres de los genes de Immune
+genes_inmunidad_ISDS = unique(immune_data$ISDS_signature)
+genes_inmunidad_ISDS = genes_inmunidad_ISDS[!is.na(genes_inmunidad_ISDS)]
+genes_inmunidad_ISDS_lista = as.list(genes_inmunidad_ISDS)
+
+genes_inmunidad_KEGG = unique(immune_data$KEGG_ANTIGEN_PROCESSING_AND_PRESENTATION)
+genes_inmunidad_KEGG = genes_inmunidad_KEGG[!is.na(genes_inmunidad_KEGG)]
+genes_inmunidad_KEGG_lista = as.list(genes_inmunidad_KEGG)
+
+genes_inmunidad_MP17 = unique(immune_data$`MP17 Interferon/MHC-II (I)`)
+genes_inmunidad_MP17 = genes_inmunidad_MP17[!is.na(genes_inmunidad_MP17)]
+genes_inmunidad_MP17_lista = as.list(genes_inmunidad_MP17)
+
+genes_inmunidad_MP18 = unique(immune_data$`MP18 Interferon/MHC-II (II)`)
+genes_inmunidad_MP18 = genes_inmunidad_MP18[!is.na(genes_inmunidad_MP18)]
+genes_inmunidad_MP18_lista = as.list(genes_inmunidad_MP18)
+
+#Genes immune juntos
+genes_inmunidad = unique(c(genes_inmunidad_ISDS, genes_inmunidad_KEGG, genes_inmunidad_MP17, genes_inmunidad_MP18))
+genes_inmunidad_lista = as.list(genes_inmunidad)
+
+
+# Extraer los nombres de los genes de stemness ES_Benporath
+genes_stemness_benporath = unique(es_benporath_data$ES_exp1_benporath)
+genes_stemness_benporath = genes_stemness_benporath[!is.na(genes_stemness_benporath)]
+genes_stemness_benporath_lista = as.list(genes_stemness_benporath)
+
+# Extraer los nombres de los genes de stemness SC_signatures
+genes_stemness_assou = unique(sc_signatures_data$Hs_ESC_Assou)
+genes_stemness_assou = genes_stemness_assou[!is.na(genes_stemness_assou)]
+genes_stemness_assou_lista = as.list(genes_stemness_assou)
+
+genes_stemness_wong = unique(sc_signatures_data$Hs_ESC_Wong)
+genes_stemness_wong = genes_stemness_wong[!is.na(genes_stemness_wong)]
+genes_stemness_wong_lista = as.list(genes_stemness_wong)
+
+genes_stemness_plurinet = unique(sc_signatures_data$SC_Plurinet_computational)
+genes_stemness_plurinet = genes_stemness_plurinet[!is.na(genes_stemness_plurinet)]
+genes_stemness_plurinet_lista = as.list(genes_stemness_plurinet)
+
+#Genes stemness juntos
+genes_stemness = unique(c(genes_stemness_benporath, genes_stemness_assou, genes_stemness_wong, genes_stemness_plurinet))
+genes_stemness_lista = as.list(genes_stemness)
+
+#lista todos los genes
+genes_TFM = unique(c(genes_stemness, genes_inmunidad))
+genes_TFM_lista = as.list(genes_TFM)
+
+```
+
+```{r Generacion de dataframe que contiene las firmas, sus genes, y de que tipo son, echo = TruE}
+firmas = c("ISDS", "KEGG Antigen and Presentation", "MP17 Interferon/MHC-II (I)", "MP18 Interferon/MHC-II (II)", "ES_exp1_Benporath", "Hs_ESC_Assou", "Hs_ESC_Wong", "SC_Plurinet_computational")
+genes_lista = list(
+  ISDS = genes_inmunidad_ISDS,
+  KEGG = genes_inmunidad_KEGG,
+  MP17 = genes_inmunidad_MP17,
+  MP18 = genes_inmunidad_MP18,
+  benporath = genes_stemness_benporath,
+  assou = genes_stemness_assou,
+  wong = genes_stemness_wong,
+  plurinet = genes_stemness_plurinet
+)
+
+df_firmas_genes = do.call(rbind, lapply(names(genes_lista), function(nombre) {
+  data.frame(
+    firma = nombre,
+    genes = paste(genes_lista[[nombre]], collapse = ", "),
+    tipo = ifelse(nombre %in% c("ISDS", "KEGG Antigen and Presentation", "MP17 Interferon/MHC-II (I)", "MP18 Interferon/MHC-II (II)"), "inmunidad", "stemness"),
+    stringsAsFactors = FALSE
+  )
+}))
+
+go = FALSE
+if (go == TRUE) {
+  write.csv(df_firmas_genes, "df_firmas_genes.csv", row.names = FALSE)
+}
+df_firmas_genes
+```
+
+
+```{r Cambios SYMBOl - ENSEMBL, echo = TRUE}
+
+#Paso de genes de nombre SYMBOL a nombre ENSEMBL
+mart = useMart("ensembl", dataset = "hsapiens_gene_ensembl")
+
+#Genes inmunidad
+genes_inmunidad_ensembl = getBM(
+  filters = "hgnc_symbol", 
+  attributes = c("hgnc_symbol", "ensembl_gene_id"), 
+  values = genes_inmunidad, 
+  mart = mart
+)
+
+genes_inmunidad_ensembl_lista = as.list(genes_inmunidad_ensembl$ensembl_gene_id)
+
+#Genes stemness
+genes_stemness_ensembl = getBM(
+  filters = "hgnc_symbol", 
+  attributes = c("hgnc_symbol", "ensembl_gene_id"), 
+  values = genes_stemness, 
+  mart = mart
+)
+
+genes_stemness_ensembl_lista = as.list(genes_stemness_ensembl$ensembl_gene_id)
+```
+
+
+```{r Guardar listas genes como csv, echo = TRUE}
+
+go = FALSE
+
+if (go == TRUE) {
+  write.csv(genes_inmunidad_ensembl, "genes_inmunidad_ensembl.csv", row.names = FALSE)
+  write.csv(genes_stemness_ensembl, "genes_stemness_ensembl.csv", row.names = FALSE)
+}
+
+genes_stemness_ensembl = read.csv("genes_stemness_ensembl.csv")
+genes_stemness_ensembl_lista = as.list(genes_stemness_ensembl$ensembl_gene_id)
+
+genes_inmunidad_ensembl = read.csv("genes_inmunidad_ensembl.csv")
+genes_inmunidad_ensembl_lista = as.list(genes_inmunidad_ensembl$ensembl_gene_id)
+```
+
+
+```{r Descarga de datos TCGA, echo = TRUE, eval = FALSE}
+
+proyecto_tcga = "TCGA-BRCA"
+TCGAbiolinks:::getProjectSummary(proyecto_tcga)
+httr::set_config(httr::config(ssl_verifypeer = FALSE))
+query = GDCquery(
+  project = "TCGA-BRCA",
+  data.category = "Transcriptome Profiling",
+  data.type = "Gene Expression Quantification",
+  workflow.type = "STAR - Counts"
+)
+
+descargar_go = "FALSE"
+if (descargar_go == "TRUE") {
+  GDCdownload(query)
+  datos_tcga = GDCprepare(query = query)
+  }
+```
+
+```{r Carga de datos tcga, echo = TRUE}
+#saveRDS(object = datos_tcga, file = "datos_tcga.RDS", compress = FALSE)
+
+reinicio_sesion = TRUE
+if(reinicio_sesion == TRUE){
+  datos_tcga = readRDS(file = "datos_tcga.RDS") 
+  }
+```
+
+
+```{r Preprocesamiento de los datos, echo = TRUE}
+
+datos_tcga_preprocessed = TCGAanalyze_Preprocessing(datos_tcga, cor.cut = 0.25)
+#Number of outliers: 0
+```
+
+```{r Normalización de los datos, echo = TRUE}
+datos_tcga_preprocessed_normalized = TCGAanalyze_Normalization(
+  tabDF = datos_tcga_preprocessed,geneInfo = geneInfoHT)
+
+expr_datos_norm_tcga = datos_tcga_preprocessed_normalized #lo guardo en uno nuevo por si lo modifico no tener que volver a normalizar
+
+#row.names(expr_datos_norm_tcga) #la normalización elimina los sufijos .XX
+reinicio_sesion = TRUE
+if(reinicio_sesion == FALSE){
+  write.csv(datos_tcga_preprocessed_normalized, "datos_tcga_preprocessed_normalized.csv",
+            row.names = TRUE)
+}
+```
+
+```{r Carga de datos preprocesados y normalizados, echo = TRUE}
+
+reinicio_sesion = TRUE
+if(reinicio_sesion == TRUE){
+  datos_tcga_preprocessed_normalized = read.csv("datos_tcga_preprocessed_normalized.csv")
+  expr_datos_norm_tcga = datos_tcga_preprocessed_normalized #lo guardo en uno nuevo por si lo modifico no tener que volver a normalizar
+  row.names(expr_datos_norm_tcga) = expr_datos_norm_tcga$X
+  expr_datos_norm_tcga$X = NULL
+}
+```
+
+```{r A punto y comprobación duplicados post-normalización, echo = TRUE}
+
+
+mode(expr_datos_norm_tcga) = "numeric" #queremos que sea numericos las expresiones de los genes
+
+datos_tcga_duplicados = sum(duplicated(rownames(expr_datos_norm_tcga))) #se calcula el numero de genes duplicados (se consideraba mismo gen distinto transcrito con sufijo .XX)
+if (datos_tcga_duplicados != 0) {
+  print("Existen datos duplicados en los datos TCGA tras el preprocesamiento y normalización")
+} else { print("No hay datos duplicados en los datos TCGA tras el preprocesamiento y normalización")}
+
+```
+
+```{r Paso de listas de genes de SYMBOL a ENSEMBL, echo = TRUE}
+
+#Genes stemness
+
+##Stemness benporath
+genes_stemness_benporath_lista_ensembl = genes_stemness_ensembl %>% filter(`hgnc_symbol` %in% genes_stemness_benporath_lista) %>% pull(ensembl_gene_id)
+
+##Stemness assou
+genes_stemness_assou_lista_ensembl = genes_stemness_ensembl %>% filter(`hgnc_symbol` %in% genes_stemness_assou_lista) %>% pull(ensembl_gene_id)
+
+##Stemness wong
+genes_stemness_wong_lista_ensembl = genes_stemness_ensembl %>% filter(`hgnc_symbol` %in% genes_stemness_wong_lista) %>% pull(ensembl_gene_id)
+
+##Stemness plurinet
+genes_stemness_plurinet_lista_ensembl = genes_stemness_ensembl %>% filter(`hgnc_symbol` %in% genes_stemness_plurinet_lista) %>% pull(ensembl_gene_id)
+
+#Genes inmune
+##Inmunidad ISDS
+genes_inmunidad_ISDS_lista_ensembl = genes_inmunidad_ensembl %>% filter(`hgnc_symbol` %in% genes_inmunidad_ISDS_lista) %>% pull(ensembl_gene_id)
+
+##Inmunidad KEGG
+genes_inmunidad_KEGG_lista_ensembl = genes_inmunidad_ensembl %>% filter(`hgnc_symbol` %in% genes_inmunidad_KEGG_lista) %>% pull(ensembl_gene_id)
+
+##Inmunidad MP17
+genes_inmunidad_MP17_lista_ensembl = genes_inmunidad_ensembl %>% filter(`hgnc_symbol` %in% genes_inmunidad_MP17_lista) %>% pull(ensembl_gene_id)
+
+##Inmunidad MP18
+genes_inmunidad_MP18_lista_ensembl = genes_inmunidad_ensembl %>% filter(`hgnc_symbol` %in% genes_inmunidad_MP18_lista) %>% pull(ensembl_gene_id)
+```
+
+
+```{r cálculo de GSVA, echo = TRUE}
+
+expr_datos_norm_tcga = as.matrix(expr_datos_norm_tcga)
+
+#Cálculo GSVA evasion inmune (inmunidad)
+
+##Inmunidad ISDS
+dataframe_genes_inmunidad_ISDS_ensembl = data.frame(Genes = unlist(genes_inmunidad_ISDS_lista_ensembl))
+lista_genes_inmunidad_ISDS_pre_gsva = list(Inmunidad = dataframe_genes_inmunidad_ISDS_ensembl$Genes)
+
+gsva_param_inmunidad_ISDS = gsvaParam(expr_datos_norm_tcga, lista_genes_inmunidad_ISDS_pre_gsva)
+gsva_scores_inmunidad_ISDS = gsva(gsva_param_inmunidad_ISDS)
+
+##Inmunidad KEGG
+dataframe_genes_inmunidad_KEGG_ensembl = data.frame(Genes = unlist(genes_inmunidad_KEGG_lista_ensembl))
+lista_genes_inmunidad_KEGG_pre_gsva = list(Inmunidad = dataframe_genes_inmunidad_KEGG_ensembl$Genes)
+
+gsva_param_inmunidad_KEGG = gsvaParam(expr_datos_norm_tcga, lista_genes_inmunidad_KEGG_pre_gsva)
+gsva_scores_inmunidad_KEGG = gsva(gsva_param_inmunidad_KEGG)
+
+##Inmunidad MP17
+dataframe_genes_inmunidad_MP17_ensembl = data.frame(Genes = unlist(genes_inmunidad_MP17_lista_ensembl))
+lista_genes_inmunidad_MP17_pre_gsva = list(Inmunidad = dataframe_genes_inmunidad_MP17_ensembl$Genes)
+
+gsva_param_inmunidad_MP17 = gsvaParam(expr_datos_norm_tcga, lista_genes_inmunidad_MP17_pre_gsva)
+gsva_scores_inmunidad_MP17 = gsva(gsva_param_inmunidad_MP17)
+
+##Inmunidad MP18
+dataframe_genes_inmunidad_MP18_ensembl = data.frame(Genes = unlist(genes_inmunidad_MP18_lista_ensembl))
+lista_genes_inmunidad_MP18_pre_gsva = list(Inmunidad = dataframe_genes_inmunidad_MP18_ensembl$Genes)
+
+gsva_param_inmunidad_MP18 = gsvaParam(expr_datos_norm_tcga, lista_genes_inmunidad_MP18_pre_gsva)
+gsva_scores_inmunidad_MP18 = gsva(gsva_param_inmunidad_MP18)
+
+#Cálculo GSVA stemness (stemness)
+
+##Stemness benporath
+dataframe_genes_stemness_benporath_ensembl = data.frame(Genes = unlist(genes_stemness_benporath_lista_ensembl))
+lista_genes_stemness_benporath_pre_gsva = list(Stemness = dataframe_genes_stemness_benporath_ensembl$Genes)
+
+gsva_param_stemness_benporath = gsvaParam(expr_datos_norm_tcga, lista_genes_stemness_benporath_pre_gsva)
+gsva_scores_stemness_Benporath = gsva(gsva_param_stemness_benporath)
+
+##Stemness assou
+dataframe_genes_stemness_assou_ensembl = data.frame(Genes = unlist(genes_stemness_assou_lista_ensembl))
+lista_genes_stemness_assou_pre_gsva = list(Stemness = dataframe_genes_stemness_assou_ensembl$Genes)
+
+gsva_param_stemness_assou = gsvaParam(expr_datos_norm_tcga, lista_genes_stemness_assou_pre_gsva)
+gsva_scores_stemness_Assou = gsva(gsva_param_stemness_assou)
+
+##Stemness wong
+dataframe_genes_stemness_wong_ensembl = data.frame(Genes = unlist(genes_stemness_wong_lista_ensembl))
+lista_genes_stemness_wong_pre_gsva = list(Stemness = dataframe_genes_stemness_wong_ensembl$Genes)
+
+gsva_param_stemness_Wong = gsvaParam(expr_datos_norm_tcga, lista_genes_stemness_wong_pre_gsva)
+gsva_scores_stemness_Wong = gsva(gsva_param_stemness_Wong)
+
+##Stemness plurinet
+dataframe_genes_stemness_Plurinet_ensembl = data.frame(Genes = unlist(genes_stemness_plurinet_lista_ensembl))
+lista_genes_stemness_plurinet_pre_gsva = list(Stemness = dataframe_genes_stemness_plurinet_ensembl$Genes)
+
+gsva_param_stemness_Plurinet = gsvaParam(expr_datos_norm_tcga, lista_genes_stemness_Plurinet_pre_gsva)
+gsva_scores_stemness_Plurinet = gsva(gsva_param_stemness_Plurinet)
+
+# Guardar los resultados
+reinicio_sesion = TRUE
+if (reinicio_sesion == FALSE) {
+  write.csv(gsva_scores_inmunidad_ISDS, "gsva_scores_inmunidad_ISDS.csv", row.names = TRUE)
+  write.csv(gsva_scores_inmunidad_KEGG, "gsva_scores_inmunidad_KEGG.csv", row.names = TRUE)
+  write.csv(gsva_scores_inmunidad_MP17, "gsva_scores_inmunidad_MP17.csv", row.names = TRUE)
+  write.csv(gsva_scores_inmunidad_MP18, "gsva_scores_inmunidad_MP18.csv", row.names = TRUE)
+  
+  write.csv(gsva_scores_stemness_Benporath, "gsva_scores_stemness_benporath.csv", row.names = TRUE)
+  write.csv(gsva_scores_stemness_Assou, "gsva_scores_stemness_assou.csv", row.names = TRUE)
+  write.csv(gsva_scores_stemness_Wong, "gsva_scores_stemness_wong.csv", row.names = TRUE)
+  write.csv(gsva_scores_stemness_Plurinet, "gsva_scores_stemness_plurinet.csv", row.names = TRUE)
+}
+
+
+```
+
+```{r Carga de valores gsva, echo = TRUE}
+reinicio_sesion = TRUE
+if (reinicio_sesion == TRUE) {
+  gsva_scores_inmunidad_ISDS = read.csv("gsva_scores_inmunidad_ISDS.csv")
+  gsva_scores_inmunidad_KEGG = read.csv("gsva_scores_inmunidad_KEGG.csv")
+  gsva_scores_inmunidad_MP17 = read.csv("gsva_scores_inmunidad_MP17.csv")
+  gsva_scores_inmunidad_MP18 = read.csv("gsva_scores_inmunidad_MP18.csv")
+  
+  gsva_scores_stemness_Benporath = read.csv("gsva_scores_stemness_benporath.csv")
+  gsva_scores_stemness_Assou = read.csv("gsva_scores_stemness_assou.csv")
+  gsva_scores_stemness_Wong = read.csv("gsva_scores_stemness_wong.csv")
+  gsva_scores_stemness_Plurinet = read.csv("gsva_scores_stemness_plurinet.csv")
+}
+```
+
+```{r Cálculos estadísticos de scores, echo = TRUE, warning =FALSE}
+
+lista_gsva_scores = list(
+  IM_ISDS = as.numeric(gsva_scores_inmunidad_ISDS),
+  IM_KEGG = as.numeric(gsva_scores_inmunidad_KEGG),
+  IM_MP17 = as.numeric(gsva_scores_inmunidad_MP17),
+  IM_MP18 = as.numeric(gsva_scores_inmunidad_MP18),
+  ST_Benporath = as.numeric(gsva_scores_stemness_Benporath),
+  ST_Assou = as.numeric(gsva_scores_stemness_Assou),
+  ST_Wong = as.numeric(gsva_scores_stemness_Wong),
+  ST_Plurinet = as.numeric(gsva_scores_stemness_Plurinet)
+)
+
+df_gsva_scores = data.frame(lista_gsva_scores)[-1, ]
+rownames(df_gsva_scores) = NULL
+
+calcular_valores_estadisticos = function(x) {
+  data.frame(
+    media = mean(x, na.rm = TRUE),
+    mediana = median(x, na.rm = TRUE),
+    desviacion = sd(x, na.rm = TRUE),
+    minimo = min(x, na.rm = TRUE),
+    maximo = max(x, na.rm = TRUE),
+    q1 = quantile(x, 0.25, na.rm = TRUE),
+    q3 = quantile(x, 0.75, na.rm = TRUE),
+    iqr = IQR(x, na.rm = TRUE),
+    n = sum(!is.na(x))
+  )
+}
+
+gsva_valores_estadisticos_df = do.call(rbind, 
+                                       lapply(lista_gsva_scores, calcular_valores_estadisticos))
+rownames(gsva_valores_estadisticos_df) = names(lista_gsva_scores)
+
+print(gsva_valores_estadisticos_df)
+
+```
+
+```{r Representacion bidimensional de las variables, echo = TRUE}
+
+inmunidad_nombres = c("IM_ISDS", "IM_KEGG", "IM_MP17", "IM_MP18")
+stemness_nombres = c("ST_Benporath", "ST_Assou", "ST_Wong", "ST_Plurinet")
+
+lista_representacion_bidim = list()
+
+for (i in inmunidad_nombres) {
+  for (j in stemness_nombres) {
+    # Cálculo de medias y medianas
+    x_mean = mean(df_gsva_scores[[j]], na.rm = TRUE)
+    y_mean = mean(df_gsva_scores[[i]], na.rm = TRUE)
+    x_median = median(df_gsva_scores[[j]], na.rm = TRUE)
+    y_median = median(df_gsva_scores[[i]], na.rm = TRUE)
+    
+    # Construcción del gráfico
+    p = ggplot(df_gsva_scores, aes(x = !!sym(j), y = !!sym(i))) +
+      geom_point(alpha = 0.6, color = "#3366CC") +
+      geom_vline(xintercept = x_mean, color = "red", linetype = "dashed", size = 0.4) +
+      geom_hline(yintercept = y_mean, color = "red", linetype = "dashed", size = 0.4) +
+      geom_vline(xintercept = x_median, color = "blue", linetype = "dotted", size = 0.4) +
+      geom_hline(yintercept = y_median, color = "blue", linetype = "dotted", size = 0.4) +
+      theme_minimal() +
+      labs(x = j, y = i) +
+      theme(
+        axis.title = element_text(size = 8),
+        axis.text = element_text(size = 6)
+      )
+    
+    lista_representacion_bidim[[length(lista_representacion_bidim) + 1]] = p
+  }
+}
+
+wrap_plots(plotlist = lista_representacion_bidim, ncol = 4)
+```
+
+
+```{r Generación del dataframe de supervivencia, echo = TRUE}
+
+tcga_data_colData = datos_tcga@colData
+
+clinical_df = tcga_data_colData[tcga_data_colData$definition == "Primary solid Tumor",
+                    c("patient",
+                      "vital_status",
+                      "days_to_death",
+                      "paper_days_to_last_followup",
+                      "gender",
+                      "paper_pathologic_stage",
+                      "paper_BRCA_Subtype_PAM50")]
+
+clinical_df$fallecido = clinical_df$vital_status == "Dead"
+clinical_df$paper_days_to_last_followup = as.character(clinical_df$paper_days_to_last_followup)
+clinical_df$paper_days_to_last_followup[is.na(clinical_df$paper_days_to_last_followup)] = "NA"
+clinical_df$paper_days_to_last_followup = as.numeric(clinical_df$paper_days_to_last_followup)
+clinical_df$paper_BRCA_Subtype_PAM50 = as.factor(clinical_df$paper_BRCA_Subtype_PAM50)
+
+clinical_df$superviviencia_general = ifelse(clinical_df$fallecido,
+                                            clinical_df$days_to_death,
+                                            clinical_df$paper_days_to_last_followup)
+```
+
+```{r Adición de scores al dataframe de supervivencia, echo = TRUE, warning=FALSE}
+clinical_df2 = clinical_df
+
+gsva_agrupados_df = data.frame(
+  paciente_id = names(gsva_scores_inmunidad_ISDS),
+  IM_ISDS       = as.numeric(gsva_scores_inmunidad_ISDS),
+  IM_KEGG       = as.numeric(gsva_scores_inmunidad_KEGG),
+  IM_MP17       = as.numeric(gsva_scores_inmunidad_MP17),
+  IM_MP18       = as.numeric(gsva_scores_inmunidad_MP18),
+  ST_Benporath  = as.numeric(gsva_scores_stemness_Benporath),
+  ST_Assou      = as.numeric(gsva_scores_stemness_Assou),
+  ST_Wong       = as.numeric(gsva_scores_stemness_Wong),
+  ST_Plurinet   = as.numeric(gsva_scores_stemness_Plurinet),
+  row.names = names(gsva_scores_inmunidad_ISDS)
+)
+gsva_agrupados_df = gsva_agrupados_df[-1, ]
+
+gsva_agrupados_df$patient_key = gsub("\\.", "-", gsva_agrupados_df$paciente_id)
+clinical_df2$patient_key = rownames(clinical_df2)
+clinical_df_completo = merge(clinical_df2, gsva_agrupados_df, by = "patient_key", all.x = TRUE)
+
+View(clinical_df_completo)
+```
+
+
+
+
+```{r Curva de supervivencia por subtipo de cancer, echo = TRUE}
+fit_supervivencia_subtipo = survfit(Surv(superviviencia_general, fallecido) ~ paper_BRCA_Subtype_PAM50, data=clinical_df_completo)
+
+
+ggsurvplot(fit_supervivencia_subtipo, data=clinical_df_completo, pval = T,
+           legend.labs = c("Basal", "HER2", "Luminal A", "Luminal B", "Normal")
+)
+```
+```{r Curva de supervivencia por score, echo = TRUE}
+
+firmas_IM = c("IM_ISDS", "IM_KEGG", "IM_MP17", "IM_MP18")
+firmas_ST = c("ST_Benporath", "ST_Assou", "ST_Wong", "ST_Plurinet")
+
+clasificar_terciles = function(df, firmas, tipo) {
+  salida = data.frame()
+  
+  for (firma in firmas) {
+    df_filtrado = df %>%
+      filter(!is.na(.data[[firma]])) %>%
+      mutate(grupo_score = case_when(
+        .data[[firma]] <= quantile(.data[[firma]], 1/3, na.rm = TRUE) ~ "Score Bajo",
+        .data[[firma]] >= quantile(.data[[firma]], 2/3, na.rm = TRUE) ~ "Score Alto",
+        TRUE ~ NA_character_
+      )) %>%
+      filter(!is.na(grupo_score)) %>%
+      mutate(firma = firma, tipo_firma = tipo, valor_score = .data[[firma]])
+
+    salida = bind_rows(salida, df_filtrado)
+  }
+
+  return(salida)
+}
+
+df_terciles_IM = clasificar_terciles(as.data.frame(clinical_df_completo), firmas_IM, "IM")
+df_terciles_ST = clasificar_terciles(as.data.frame(clinical_df_completo), firmas_ST, "ST")
+
+supervivencia_por_firma = function(df_terciles, lista_firmas, titulo_base) {
+  plots = list()
+  
+  for (firm in lista_firmas) {
+    df_firma = df_terciles %>% filter(firma == firm)
+    
+    #df_firma = df_firma %>% filter(!is.na(superviviencia_general), !is.na(fallecido), superviviencia_general >= 0)
+
+
+    
+    fit = survfit(Surv(superviviencia_general, fallecido) ~ grupo_score, data = df_firma)
+      
+    plot_sup = ggsurvplot(
+      fit,
+      data = df_firma,
+      pval = TRUE,
+      risk.table = TRUE,
+      legend.title = paste("Tipo Score", firm),
+      title = paste(titulo_base, firm),
+      legend.labs = c("Score Alto", "Score Bajo")
+    )
+
+    plots[[firm]] = plot_sup
+  }
+  return(plots)
+}
+
+plots_IM = supervivencia_por_firma(df_terciles_IM, firmas_IM, "Supervivencia")
+plots_ST = supervivencia_por_firma(df_terciles_ST, firmas_ST, "Supervivencia")
+
+#print(plots_IM[["IM_ISDS"]]$plot)
+
+grid.arrange(grobs = lapply(plots_IM, `[[`, "plot"), ncol = 2)
+grid.arrange(grobs = lapply(plots_ST, `[[`, "plot"), ncol = 2)
+```
+
+```{r Selección de fenotipo SCIE por cuartil con medianas, echo = TRUE}
+
+firmas_IM = c("IM_ISDS", "IM_KEGG", "IM_MP17", "IM_MP18")
+firmas_ST = c("ST_Benporath", "ST_Assou", "ST_Wong", "ST_Plurinet")
+
+for (im in firmas_IM) {
+  for (st in firmas_ST) {
+    mediana_im = gsva_valores_estadisticos_df[im, "mediana"]
+    mediana_st = gsva_valores_estadisticos_df[st, "mediana"]
+    
+    df_filtrado_SCIE = clinical_df_completo[
+      clinical_df_completo[[im]] <= mediana_im &
+      clinical_df_completo[[st]] >= mediana_st,
+    ]
+    
+    nombre_df = paste0("df_SCIE_", im, "_", st)
+    assign(nombre_df, df_filtrado_SCIE)
+  }
+}
+
+```
+
+```{r Selección de fenotipo control por cuartil con medianas, echo = TRUE}
+
+firmas_IM = c("IM_ISDS", "IM_KEGG", "IM_MP17", "IM_MP18")
+firmas_ST = c("ST_Benporath", "ST_Assou", "ST_Wong", "ST_Plurinet")
+
+for (im in firmas_IM) {
+  for (st in firmas_ST) {
+    
+    mediana_im = gsva_valores_estadisticos_df[im, "mediana"]
+    mediana_st = gsva_valores_estadisticos_df[st, "mediana"]
+    
+    df_filtrado_control = clinical_df_completo[
+      clinical_df_completo[[im]] > mediana_im &
+      clinical_df_completo[[st]] < mediana_st,
+    ]
+    
+    nombre_df = paste0("df_control_", im, "_", st)
+    assign(nombre_df, df_filtrado_control)
+  }
+}
+```
+
+
+```{r Análisis diferencial para la obtención de genes SCIE en la pareja IM_ISDS_ST_Benporath, echo = TRUE}
+
+pacientes_SCIE_IM_ISDS_ST_Benporath = df_SCIE_IM_ISDS_ST_Benporath$patient_key
+pacientes_control_IM_ISDS_ST_Benporath = df_control_IM_ISDS_ST_Benporath$patient_key
+
+expr_datos_norm_tcga_2 = expr_datos_norm_tcga
+
+colnames(expr_datos_norm_tcga_2) = gsub("\\.", "-", colnames(expr_datos_norm_tcga_2))
+
+pacientes_validos_IM_ISDS_ST_Benporath = intersect(c(pacientes_SCIE_IM_ISDS_ST_Benporath,
+                                                     pacientes_control_IM_ISDS_ST_Benporath),
+                                                   colnames(expr_datos_norm_tcga_2))
+expr_IM_ISDS_ST_Benporath = expr_datos_norm_tcga_2[, pacientes_validos_IM_ISDS_ST_Benporath]
+
+grupo_IM_ISDS_ST_Benporath = factor(ifelse(pacientes_validos_IM_ISDS_ST_Benporath %in%
+                        pacientes_SCIE_IM_ISDS_ST_Benporath, "SCIE", "Control"))
+
+orden_IM_ISDS_ST_Benporath = order(grupo_IM_ISDS_ST_Benporath)
+expr_IM_ISDS_ST_Benporath = expr_IM_ISDS_ST_Benporath[, orden_IM_ISDS_ST_Benporath]
+grupo_IM_ISDS_ST_Benporath = grupo_IM_ISDS_ST_Benporath[orden_IM_ISDS_ST_Benporath]
+
+design_IM_ISDS_ST_Benporath = model.matrix(~ grupo_IM_ISDS_ST_Benporath)
+fit_IM_ISDS_ST_Benporath = lmFit(expr_IM_ISDS_ST_Benporath, design_IM_ISDS_ST_Benporath)
+fit_IM_ISDS_ST_Benporath = eBayes(fit_IM_ISDS_ST_Benporath)
+resultados_diferencial_IM_ISDS_ST_Benporath = topTable(fit_IM_ISDS_ST_Benporath, coef = 2, 
+                                                       number = Inf, adjust.method = "BH")
+
+genes_significativos_IM_ISDS_ST_Benporath = resultados_diferencial_IM_ISDS_ST_Benporath[
+  resultados_diferencial_IM_ISDS_ST_Benporath$adj.P.Val < 0.05 &
+    abs(resultados_diferencial_IM_ISDS_ST_Benporath$logFC) > 1, ]
+
+dim(genes_significativos_IM_ISDS_ST_Benporath)
+```
+
+```{r Análisis diferencial para la obtenicón de genes SCIE en la pareja IM_ISDS_ST_Assou, echo = TRUE}
+
+pacientes_SCIE_IM_ISDS_ST_Assou = df_SCIE_IM_ISDS_ST_Assou$patient_key
+pacientes_control_IM_ISDS_ST_Assou = df_control_IM_ISDS_ST_Assou$patient_key
+
+pacientes_validos_IM_ISDS_ST_Assou = intersect(c(pacientes_SCIE_IM_ISDS_ST_Assou,
+                                                     pacientes_control_IM_ISDS_ST_Assou),
+                                                   colnames(expr_datos_norm_tcga_2))
+expr_IM_ISDS_ST_Assou = expr_datos_norm_tcga_2[, pacientes_validos_IM_ISDS_ST_Assou]
+
+grupo_IM_ISDS_ST_Assou = factor(ifelse(pacientes_validos_IM_ISDS_ST_Assou %in%
+                        pacientes_SCIE_IM_ISDS_ST_Assou, "SCIE", "Control"))
+
+orden_IM_ISDS_ST_Assou = order(grupo_IM_ISDS_ST_Assou)
+expr_IM_ISDS_ST_Assou = expr_IM_ISDS_ST_Assou[, orden_IM_ISDS_ST_Assou]
+grupo_IM_ISDS_ST_Assou = grupo_IM_ISDS_ST_Assou[orden_IM_ISDS_ST_Assou]
+
+design_IM_ISDS_ST_Assou = model.matrix(~ grupo_IM_ISDS_ST_Assou)
+fit_IM_ISDS_ST_Assou= lmFit(expr_IM_ISDS_ST_Assou, design_IM_ISDS_ST_Assou)
+fit_IM_ISDS_ST_Assou = eBayes(fit_IM_ISDS_ST_Assou)
+resultados_diferencial_IM_ISDS_ST_Assou = topTable(fit_IM_ISDS_ST_Assou, coef = 2, 
+                                                       number = Inf, adjust.method = "BH")
+
+genes_significativos_IM_ISDS_ST_Assou = resultados_diferencial_IM_ISDS_ST_Assou[
+  resultados_diferencial_IM_ISDS_ST_Assou$adj.P.Val < 0.05 &
+    abs(resultados_diferencial_IM_ISDS_ST_Assou$logFC) > 1, ]
+
+dim(genes_significativos_IM_ISDS_ST_Assou)
+```
+
+```{r Análisis diferencial para la obtenicón de genes SCIE en la pareja IM_ISDS_ST_Wong, echo = TRUE}
+
+pacientes_SCIE_IM_ISDS_ST_Wong = df_SCIE_IM_ISDS_ST_Wong$patient_key
+pacientes_control_IM_ISDS_ST_Wong = df_control_IM_ISDS_ST_Wong$patient_key
+
+pacientes_validos_IM_ISDS_ST_Wong = intersect(c(pacientes_SCIE_IM_ISDS_ST_Wong,
+                                                     pacientes_control_IM_ISDS_ST_Wong),
+                                                   colnames(expr_datos_norm_tcga_2))
+expr_IM_ISDS_ST_Wong = expr_datos_norm_tcga_2[, pacientes_validos_IM_ISDS_ST_Wong]
+
+grupo_IM_ISDS_ST_Wong = factor(ifelse(pacientes_validos_IM_ISDS_ST_Wong %in%
+                        pacientes_SCIE_IM_ISDS_ST_Wong, "SCIE", "Control"))
+
+orden_IM_ISDS_ST_Wong = order(grupo_IM_ISDS_ST_Wong)
+expr_IM_ISDS_ST_Wong = expr_IM_ISDS_ST_Wong[, orden_IM_ISDS_ST_Wong]
+grupo_IM_ISDS_ST_Wong = grupo_IM_ISDS_ST_Wong[orden_IM_ISDS_ST_Wong]
+
+design_IM_ISDS_ST_Wong = model.matrix(~ grupo_IM_ISDS_ST_Wong)
+fit_IM_ISDS_ST_Wong = lmFit(expr_IM_ISDS_ST_Wong, design_IM_ISDS_ST_Wong)
+fit_IM_ISDS_ST_Wong = eBayes(fit_IM_ISDS_ST_Wong)
+resultados_diferencial_IM_ISDS_ST_Wong = topTable(fit_IM_ISDS_ST_Wong, coef = 2, 
+                                                       number = Inf, adjust.method = "BH")
+
+genes_significativos_IM_ISDS_ST_Wong = resultados_diferencial_IM_ISDS_ST_Wong[
+  resultados_diferencial_IM_ISDS_ST_Wong$adj.P.Val < 0.05 &
+    abs(resultados_diferencial_IM_ISDS_ST_Wong$logFC) > 1, ]
+
+dim(genes_significativos_IM_ISDS_ST_Wong)
+```
+
+```{r Análisis diferencial para la obtenicón de genes SCIE en la pareja IM_ISDS_ST_Plurinet, echo = TRUE}
+
+pacientes_SCIE_IM_ISDS_ST_Plurinet = df_SCIE_IM_ISDS_ST_Plurinet$patient_key
+pacientes_control_IM_ISDS_ST_Plurinet = df_control_IM_ISDS_ST_Plurinet$patient_key
+
+pacientes_validos_IM_ISDS_ST_Plurinet = intersect(c(pacientes_SCIE_IM_ISDS_ST_Plurinet,
+                                                     pacientes_control_IM_ISDS_ST_Plurinet),
+                                                   colnames(expr_datos_norm_tcga_2))
+expr_IM_ISDS_ST_Plurinet = expr_datos_norm_tcga_2[, pacientes_validos_IM_ISDS_ST_Plurinet]
+
+grupo_IM_ISDS_ST_Plurinet = factor(ifelse(pacientes_validos_IM_ISDS_ST_Plurinet %in%
+                        pacientes_SCIE_IM_ISDS_ST_Plurinet, "SCIE", "Control"))
+
+orden_IM_ISDS_ST_Plurinet = order(grupo_IM_ISDS_ST_Plurinet)
+expr_IM_ISDS_ST_Plurinet = expr_IM_ISDS_ST_Plurinet[, orden_IM_ISDS_ST_Plurinet]
+grupo_IM_ISDS_ST_Plurinet = grupo_IM_ISDS_ST_Plurinet[orden_IM_ISDS_ST_Plurinet]
+
+design_IM_ISDS_ST_Plurinet = model.matrix(~ grupo_IM_ISDS_ST_Plurinet)
+fit_IM_ISDS_ST_Plurinet= lmFit(expr_IM_ISDS_ST_Plurinet, design_IM_ISDS_ST_Plurinet)
+fit_IM_ISDS_ST_Plurinet = eBayes(fit_IM_ISDS_ST_Plurinet)
+resultados_diferencial_IM_ISDS_ST_Plurinet = topTable(fit_IM_ISDS_ST_Plurinet, coef = 2, 
+                                                       number = Inf, adjust.method = "BH")
+
+genes_significativos_IM_ISDS_ST_Plurinet = resultados_diferencial_IM_ISDS_ST_Plurinet[
+  resultados_diferencial_IM_ISDS_ST_Plurinet$adj.P.Val < 0.05 &
+    abs(resultados_diferencial_IM_ISDS_ST_Plurinet$logFC) > 1, ]
+
+dim(genes_significativos_IM_ISDS_ST_Plurinet)
+```
+
+
+```{r Análisis diferencial para la obtenicón de genes SCIE en la pareja IM_KEGG_ST_Benporath, echo = TRUE}
+
+pacientes_SCIE_IM_KEGG_ST_Benporath = df_SCIE_IM_KEGG_ST_Benporath$patient_key
+pacientes_control_IM_KEGG_ST_Benporath = df_control_IM_KEGG_ST_Benporath$patient_key
+
+expr_datos_norm_tcga_2 = expr_datos_norm_tcga
+
+colnames(expr_datos_norm_tcga_2) = gsub("\\.", "-", colnames(expr_datos_norm_tcga_2))
+
+pacientes_validos_IM_KEGG_ST_Benporath = intersect(c(pacientes_SCIE_IM_KEGG_ST_Benporath,
+                                                     pacientes_control_IM_KEGG_ST_Benporath),
+                                                   colnames(expr_datos_norm_tcga_2))
+expr_IM_KEGG_ST_Benporath = expr_datos_norm_tcga_2[, pacientes_validos_IM_KEGG_ST_Benporath]
+
+grupo_IM_KEGG_ST_Benporath = factor(ifelse(pacientes_validos_IM_KEGG_ST_Benporath %in%
+                        pacientes_SCIE_IM_KEGG_ST_Benporath, "SCIE", "Control"))
+
+orden_IM_KEGG_ST_Benporath = order(grupo_IM_KEGG_ST_Benporath)
+expr_IM_KEGG_ST_Benporath = expr_IM_KEGG_ST_Benporath[, orden_IM_KEGG_ST_Benporath]
+grupo_IM_KEGG_ST_Benporath = grupo_IM_KEGG_ST_Benporath[orden_IM_KEGG_ST_Benporath]
+
+design_IM_KEGG_ST_Benporath = model.matrix(~ grupo_IM_KEGG_ST_Benporath)
+fit_IM_KEGG_ST_Benporath = lmFit(expr_IM_KEGG_ST_Benporath, design_IM_KEGG_ST_Benporath)
+fit_IM_KEGG_ST_Benporath = eBayes(fit_IM_KEGG_ST_Benporath)
+resultados_diferencial_IM_KEGG_ST_Benporath = topTable(fit_IM_KEGG_ST_Benporath, coef = 2, 
+                                                       number = Inf, adjust.method = "BH")
+
+genes_significativos_IM_KEGG_ST_Benporath = resultados_diferencial_IM_KEGG_ST_Benporath[
+  resultados_diferencial_IM_KEGG_ST_Benporath$adj.P.Val < 0.05 &
+    abs(resultados_diferencial_IM_KEGG_ST_Benporath$logFC) > 1, ]
+
+dim(genes_significativos_IM_KEGG_ST_Benporath)
+```
+
+```{r Análisis diferencial para la obtenicón de genes SCIE en la pareja IM_KEGG_ST_Assou, echo = TRUE}
+
+pacientes_SCIE_IM_KEGG_ST_Assou = df_SCIE_IM_KEGG_ST_Assou$patient_key
+pacientes_control_IM_KEGG_ST_Assou = df_control_IM_KEGG_ST_Assou$patient_key
+
+pacientes_validos_IM_KEGG_ST_Assou = intersect(c(pacientes_SCIE_IM_KEGG_ST_Assou,
+                                                     pacientes_control_IM_KEGG_ST_Assou),
+                                                   colnames(expr_datos_norm_tcga_2))
+expr_IM_KEGG_ST_Assou = expr_datos_norm_tcga_2[, pacientes_validos_IM_KEGG_ST_Assou]
+
+grupo_IM_KEGG_ST_Assou = factor(ifelse(pacientes_validos_IM_KEGG_ST_Assou %in%
+                        pacientes_SCIE_IM_KEGG_ST_Assou, "SCIE", "Control"))
+
+orden_IM_KEGG_ST_Assou = order(grupo_IM_KEGG_ST_Assou)
+expr_IM_KEGG_ST_Assou = expr_IM_KEGG_ST_Assou[, orden_IM_KEGG_ST_Assou]
+grupo_IM_KEGG_ST_Assou = grupo_IM_KEGG_ST_Assou[orden_IM_KEGG_ST_Assou]
+
+design_IM_KEGG_ST_Assou = model.matrix(~ grupo_IM_KEGG_ST_Assou)
+fit_IM_KEGG_ST_Assou= lmFit(expr_IM_KEGG_ST_Assou, design_IM_KEGG_ST_Assou)
+fit_IM_KEGG_ST_Assou = eBayes(fit_IM_KEGG_ST_Assou)
+resultados_diferencial_IM_KEGG_ST_Assou = topTable(fit_IM_KEGG_ST_Assou, coef = 2, 
+                                                       number = Inf, adjust.method = "BH")
+
+genes_significativos_IM_KEGG_ST_Assou = resultados_diferencial_IM_KEGG_ST_Assou[
+  resultados_diferencial_IM_KEGG_ST_Assou$adj.P.Val < 0.05 &
+    abs(resultados_diferencial_IM_KEGG_ST_Assou$logFC) > 1, ]
+
+dim(genes_significativos_IM_KEGG_ST_Assou)
+```
+
+```{r Análisis diferencial para la obtenicón de genes SCIE en la pareja IM_KEGG_ST_Wong, echo = TRUE}
+
+pacientes_SCIE_IM_KEGG_ST_Wong = df_SCIE_IM_KEGG_ST_Wong$patient_key
+pacientes_control_IM_KEGG_ST_Wong = df_control_IM_KEGG_ST_Wong$patient_key
+
+pacientes_validos_IM_KEGG_ST_Wong = intersect(c(pacientes_SCIE_IM_KEGG_ST_Wong,
+                                                     pacientes_control_IM_KEGG_ST_Wong),
+                                                   colnames(expr_datos_norm_tcga_2))
+expr_IM_KEGG_ST_Wong = expr_datos_norm_tcga_2[, pacientes_validos_IM_KEGG_ST_Wong]
+
+grupo_IM_KEGG_ST_Wong = factor(ifelse(pacientes_validos_IM_KEGG_ST_Wong %in%
+                        pacientes_SCIE_IM_KEGG_ST_Wong, "SCIE", "Control"))
+
+orden_IM_KEGG_ST_Wong = order(grupo_IM_KEGG_ST_Wong)
+expr_IM_KEGG_ST_Wong = expr_IM_KEGG_ST_Wong[, orden_IM_KEGG_ST_Wong]
+grupo_IM_KEGG_ST_Wong = grupo_IM_KEGG_ST_Wong[orden_IM_KEGG_ST_Wong]
+
+design_IM_KEGG_ST_Wong = model.matrix(~ grupo_IM_KEGG_ST_Wong)
+fit_IM_KEGG_ST_Wong= lmFit(expr_IM_KEGG_ST_Wong, design_IM_KEGG_ST_Wong)
+fit_IM_KEGG_ST_Wong = eBayes(fit_IM_KEGG_ST_Wong)
+resultados_diferencial_IM_KEGG_ST_Wong = topTable(fit_IM_KEGG_ST_Wong, coef = 2, 
+                                                       number = Inf, adjust.method = "BH")
+
+genes_significativos_IM_KEGG_ST_Wong = resultados_diferencial_IM_KEGG_ST_Wong[
+  resultados_diferencial_IM_KEGG_ST_Wong$adj.P.Val < 0.05 &
+    abs(resultados_diferencial_IM_KEGG_ST_Wong$logFC) > 1, ]
+
+dim(genes_significativos_IM_KEGG_ST_Wong)
+```
+
+```{r Análisis diferencial para la obtenicón de genes SCIE en la pareja IM_KEGG_ST_Plurinet, echo = TRUE}
+
+pacientes_SCIE_IM_KEGG_ST_Plurinet = df_SCIE_IM_KEGG_ST_Plurinet$patient_key
+pacientes_control_IM_KEGG_ST_Plurinet = df_control_IM_KEGG_ST_Plurinet$patient_key
+
+pacientes_validos_IM_KEGG_ST_Plurinet = intersect(c(pacientes_SCIE_IM_KEGG_ST_Plurinet,
+                                                     pacientes_control_IM_KEGG_ST_Plurinet),
+                                                   colnames(expr_datos_norm_tcga_2))
+expr_IM_KEGG_ST_Plurinet = expr_datos_norm_tcga_2[, pacientes_validos_IM_KEGG_ST_Plurinet]
+
+grupo_IM_KEGG_ST_Plurinet = factor(ifelse(pacientes_validos_IM_KEGG_ST_Plurinet %in%
+                        pacientes_SCIE_IM_KEGG_ST_Plurinet, "SCIE", "Control"))
+
+orden_IM_KEGG_ST_Plurinet = order(grupo_IM_KEGG_ST_Plurinet)
+expr_IM_KEGG_ST_Plurinet = expr_IM_KEGG_ST_Plurinet[, orden_IM_KEGG_ST_Plurinet]
+grupo_IM_KEGG_ST_Plurinet = grupo_IM_KEGG_ST_Plurinet[orden_IM_KEGG_ST_Plurinet]
+
+design_IM_KEGG_ST_Plurinet = model.matrix(~ grupo_IM_KEGG_ST_Plurinet)
+fit_IM_KEGG_ST_Plurinet= lmFit(expr_IM_KEGG_ST_Plurinet, design_IM_KEGG_ST_Plurinet)
+fit_IM_KEGG_ST_Plurinet = eBayes(fit_IM_KEGG_ST_Plurinet)
+resultados_diferencial_IM_KEGG_ST_Plurinet = topTable(fit_IM_KEGG_ST_Plurinet, coef = 2, 
+                                                       number = Inf, adjust.method = "BH")
+
+genes_significativos_IM_KEGG_ST_Plurinet = resultados_diferencial_IM_KEGG_ST_Plurinet[
+  resultados_diferencial_IM_KEGG_ST_Plurinet$adj.P.Val < 0.05 &
+    abs(resultados_diferencial_IM_KEGG_ST_Plurinet$logFC) > 1, ]
+
+dim(genes_significativos_IM_KEGG_ST_Plurinet)
+```
+
+
+```{r Análisis diferencial para la obtenicón de genes SCIE en la pareja IM_MP17_ST_Benporath, echo = TRUE}
+
+pacientes_SCIE_IM_MP17_ST_Benporath = df_SCIE_IM_MP17_ST_Benporath$patient_key
+pacientes_control_IM_MP17_ST_Benporath = df_control_IM_MP17_ST_Benporath$patient_key
+
+pacientes_validos_IM_MP17_ST_Benporath = intersect(c(pacientes_SCIE_IM_MP17_ST_Benporath,
+                                                     pacientes_control_IM_MP17_ST_Benporath),
+                                                   colnames(expr_datos_norm_tcga_2))
+
+expr_IM_MP17_ST_Benporath = expr_datos_norm_tcga_2[, pacientes_validos_IM_MP17_ST_Benporath]
+
+grupo_IM_MP17_ST_Benporath = factor(ifelse(pacientes_validos_IM_MP17_ST_Benporath %in%
+                        pacientes_SCIE_IM_MP17_ST_Benporath, "SCIE", "Control"))
+
+orden_IM_MP17_ST_Benporath = order(grupo_IM_MP17_ST_Benporath)
+expr_IM_MP17_ST_Benporath = expr_IM_MP17_ST_Benporath[, orden_IM_MP17_ST_Benporath]
+grupo_IM_MP17_ST_Benporath = grupo_IM_MP17_ST_Benporath[orden_IM_MP17_ST_Benporath]
+
+design_IM_MP17_ST_Benporath = model.matrix(~ grupo_IM_MP17_ST_Benporath)
+fit_IM_MP17_ST_Benporath = lmFit(expr_IM_MP17_ST_Benporath, design_IM_MP17_ST_Benporath)
+fit_IM_MP17_ST_Benporath = eBayes(fit_IM_MP17_ST_Benporath)
+resultados_diferencial_IM_MP17_ST_Benporath = topTable(fit_IM_MP17_ST_Benporath, coef = 2, 
+                                                       number = Inf, adjust.method = "BH")
+
+genes_significativos_IM_MP17_ST_Benporath = resultados_diferencial_IM_MP17_ST_Benporath[
+  resultados_diferencial_IM_MP17_ST_Benporath$adj.P.Val < 0.05 &
+    abs(resultados_diferencial_IM_MP17_ST_Benporath$logFC) > 1, ]
+
+dim(genes_significativos_IM_MP17_ST_Benporath)
+```
+
+```{r Análisis diferencial para la obtenicón de genes SCIE en la pareja IM_MP17_ST_Assou, echo = TRUE}
+
+pacientes_SCIE_IM_MP17_ST_Assou = df_SCIE_IM_MP17_ST_Assou$patient_key
+pacientes_control_IM_MP17_ST_Assou = df_control_IM_MP17_ST_Assou$patient_key
+
+pacientes_validos_IM_MP17_ST_Assou = intersect(c(pacientes_SCIE_IM_MP17_ST_Assou,
+                                                     pacientes_control_IM_MP17_ST_Assou),
+                                                   colnames(expr_datos_norm_tcga_2))
+expr_IM_MP17_ST_Assou = expr_datos_norm_tcga_2[, pacientes_validos_IM_MP17_ST_Assou]
+
+grupo_IM_MP17_ST_Assou = factor(ifelse(pacientes_validos_IM_MP17_ST_Assou %in%
+                        pacientes_SCIE_IM_MP17_ST_Assou, "SCIE", "Control"))
+
+orden_IM_MP17_ST_Assou = order(grupo_IM_MP17_ST_Assou)
+expr_IM_MP17_ST_Assou = expr_IM_MP17_ST_Assou[, orden_IM_MP17_ST_Assou]
+grupo_IM_MP17_ST_Assou = grupo_IM_MP17_ST_Assou[orden_IM_MP17_ST_Assou]
+
+design_IM_MP17_ST_Assou = model.matrix(~ grupo_IM_MP17_ST_Assou)
+fit_IM_MP17_ST_Assou= lmFit(expr_IM_MP17_ST_Assou, design_IM_MP17_ST_Assou)
+fit_IM_MP17_ST_Assou = eBayes(fit_IM_MP17_ST_Assou)
+resultados_diferencial_IM_MP17_ST_Assou = topTable(fit_IM_MP17_ST_Assou, coef = 2, 
+                                                       number = Inf, adjust.method = "BH")
+
+genes_significativos_IM_MP17_ST_Assou = resultados_diferencial_IM_MP17_ST_Assou[
+  resultados_diferencial_IM_MP17_ST_Assou$adj.P.Val < 0.05 &
+    abs(resultados_diferencial_IM_MP17_ST_Assou$logFC) > 1, ]
+
+dim(genes_significativos_IM_MP17_ST_Assou)
+```
+
+```{r Análisis diferencial para la obtenicón de genes SCIE en la pareja IM_MP17_ST_Wong, echo = TRUE}
+
+pacientes_SCIE_IM_MP17_ST_Wong = df_SCIE_IM_MP17_ST_Wong$patient_key
+pacientes_control_IM_MP17_ST_Wong = df_control_IM_MP17_ST_Wong$patient_key
+
+pacientes_validos_IM_MP17_ST_Wong = intersect(c(pacientes_SCIE_IM_MP17_ST_Wong,
+                                                     pacientes_control_IM_MP17_ST_Wong),
+                                                   colnames(expr_datos_norm_tcga_2))
+expr_IM_MP17_ST_Wong = expr_datos_norm_tcga_2[, pacientes_validos_IM_MP17_ST_Wong]
+
+grupo_IM_MP17_ST_Wong = factor(ifelse(pacientes_validos_IM_MP17_ST_Wong %in%
+                        pacientes_SCIE_IM_MP17_ST_Wong, "SCIE", "Control"))
+
+orden_IM_MP17_ST_Wong = order(grupo_IM_MP17_ST_Wong)
+expr_IM_MP17_ST_Wong = expr_IM_MP17_ST_Wong[, orden_IM_MP17_ST_Wong]
+grupo_IM_MP17_ST_Wong = grupo_IM_MP17_ST_Wong[orden_IM_MP17_ST_Wong]
+
+design_IM_MP17_ST_Wong = model.matrix(~ grupo_IM_MP17_ST_Wong)
+fit_IM_MP17_ST_Wong= lmFit(expr_IM_MP17_ST_Wong, design_IM_MP17_ST_Wong)
+fit_IM_MP17_ST_Wong = eBayes(fit_IM_MP17_ST_Wong)
+resultados_diferencial_IM_MP17_ST_Wong = topTable(fit_IM_MP17_ST_Wong, coef = 2, 
+                                                       number = Inf, adjust.method = "BH")
+
+genes_significativos_IM_MP17_ST_Wong = resultados_diferencial_IM_MP17_ST_Wong[
+  resultados_diferencial_IM_MP17_ST_Wong$adj.P.Val < 0.05 &
+    abs(resultados_diferencial_IM_MP17_ST_Wong$logFC) > 1, ]
+
+dim(genes_significativos_IM_MP17_ST_Wong)
+```
+
+```{r Análisis diferencial para la obtenicón de genes SCIE en la pareja IM_MP17_ST_Plurinet, echo = TRUE}
+
+pacientes_SCIE_IM_MP17_ST_Plurinet = df_SCIE_IM_MP17_ST_Plurinet$patient_key
+pacientes_control_IM_MP17_ST_Plurinet = df_control_IM_MP17_ST_Plurinet$patient_key
+
+pacientes_validos_IM_MP17_ST_Plurinet = intersect(c(pacientes_SCIE_IM_MP17_ST_Plurinet,
+                                                     pacientes_control_IM_MP17_ST_Plurinet),
+                                                   colnames(expr_datos_norm_tcga_2))
+expr_IM_MP17_ST_Plurinet = expr_datos_norm_tcga_2[, pacientes_validos_IM_MP17_ST_Plurinet]
+
+grupo_IM_MP17_ST_Plurinet = factor(ifelse(pacientes_validos_IM_MP17_ST_Plurinet %in%
+                        pacientes_SCIE_IM_MP17_ST_Plurinet, "SCIE", "Control"))
+
+orden_IM_MP17_ST_Plurinet = order(grupo_IM_MP17_ST_Plurinet)
+expr_IM_MP17_ST_Plurinet = expr_IM_MP17_ST_Plurinet[, orden_IM_MP17_ST_Plurinet]
+grupo_IM_MP17_ST_Plurinet = grupo_IM_MP17_ST_Plurinet[orden_IM_MP17_ST_Plurinet]
+
+design_IM_MP17_ST_Plurinet = model.matrix(~ grupo_IM_MP17_ST_Plurinet)
+fit_IM_MP17_ST_Plurinet= lmFit(expr_IM_MP17_ST_Plurinet, design_IM_MP17_ST_Plurinet)
+fit_IM_MP17_ST_Plurinet = eBayes(fit_IM_MP17_ST_Plurinet)
+resultados_diferencial_IM_MP17_ST_Plurinet = topTable(fit_IM_MP17_ST_Plurinet, coef = 2, 
+                                                       number = Inf, adjust.method = "BH")
+
+genes_significativos_IM_MP17_ST_Plurinet = resultados_diferencial_IM_MP17_ST_Plurinet[
+  resultados_diferencial_IM_MP17_ST_Plurinet$adj.P.Val < 0.05 &
+    abs(resultados_diferencial_IM_MP17_ST_Plurinet$logFC) > 1, ]
+
+dim(genes_significativos_IM_MP17_ST_Plurinet)
+```
+
+
+```{r Análisis diferencial para la obtenicón de genes SCIE en la pareja IM_MP18_ST_Benporath, echo = TRUE}
+
+pacientes_SCIE_IM_MP18_ST_Benporath = df_SCIE_IM_MP18_ST_Benporath$patient_key
+pacientes_control_IM_MP18_ST_Benporath = df_control_IM_MP18_ST_Benporath$patient_key
+
+pacientes_validos_IM_MP18_ST_Benporath = intersect(c(pacientes_SCIE_IM_MP18_ST_Benporath,
+                                                     pacientes_control_IM_MP18_ST_Benporath),
+                                                   colnames(expr_datos_norm_tcga_2))
+expr_IM_MP18_ST_Benporath = expr_datos_norm_tcga_2[, pacientes_validos_IM_MP18_ST_Benporath]
+
+grupo_IM_MP18_ST_Benporath = factor(ifelse(pacientes_validos_IM_MP18_ST_Benporath %in%
+                        pacientes_SCIE_IM_MP18_ST_Benporath, "SCIE", "Control"))
+
+orden_IM_MP18_ST_Benporath = order(grupo_IM_MP18_ST_Benporath)
+expr_IM_MP18_ST_Benporath = expr_IM_MP18_ST_Benporath[, orden_IM_MP18_ST_Benporath]
+grupo_IM_MP18_ST_Benporath = grupo_IM_MP18_ST_Benporath[orden_IM_MP18_ST_Benporath]
+
+design_IM_MP18_ST_Benporath = model.matrix(~ grupo_IM_MP18_ST_Benporath)
+fit_IM_MP18_ST_Benporath = lmFit(expr_IM_MP18_ST_Benporath, design_IM_MP18_ST_Benporath)
+fit_IM_MP18_ST_Benporath = eBayes(fit_IM_MP18_ST_Benporath)
+resultados_diferencial_IM_MP18_ST_Benporath = topTable(fit_IM_MP18_ST_Benporath, coef = 2, 
+                                                       number = Inf, adjust.method = "BH")
+
+genes_significativos_IM_MP18_ST_Benporath = resultados_diferencial_IM_MP18_ST_Benporath[
+  resultados_diferencial_IM_MP18_ST_Benporath$adj.P.Val < 0.05 &
+    abs(resultados_diferencial_IM_MP18_ST_Benporath$logFC) > 1, ]
+
+dim(genes_significativos_IM_MP18_ST_Benporath)
+```
+
+```{r Análisis diferencial para la obtenicón de genes SCIE en la pareja IM_MP18_ST_Assou, echo = TRUE}
+
+pacientes_SCIE_IM_MP18_ST_Assou = df_SCIE_IM_MP18_ST_Assou$patient_key
+pacientes_control_IM_MP18_ST_Assou = df_control_IM_MP18_ST_Assou$patient_key
+
+pacientes_validos_IM_MP18_ST_Assou = intersect(c(pacientes_SCIE_IM_MP18_ST_Assou,
+                                                     pacientes_control_IM_MP18_ST_Assou),
+                                                   colnames(expr_datos_norm_tcga_2))
+expr_IM_MP18_ST_Assou = expr_datos_norm_tcga_2[, pacientes_validos_IM_MP18_ST_Assou]
+
+grupo_IM_MP18_ST_Assou = factor(ifelse(pacientes_validos_IM_MP18_ST_Assou %in%
+                        pacientes_SCIE_IM_MP18_ST_Assou, "SCIE", "Control"))
+
+orden_IM_MP18_ST_Assou = order(grupo_IM_MP18_ST_Assou)
+expr_IM_MP18_ST_Assou = expr_IM_MP18_ST_Assou[, orden_IM_MP18_ST_Assou]
+grupo_IM_MP18_ST_Assou = grupo_IM_MP18_ST_Assou[orden_IM_MP18_ST_Assou]
+
+design_IM_MP18_ST_Assou = model.matrix(~ grupo_IM_MP18_ST_Assou)
+fit_IM_MP18_ST_Assou= lmFit(expr_IM_MP18_ST_Assou, design_IM_MP18_ST_Assou)
+fit_IM_MP18_ST_Assou = eBayes(fit_IM_MP18_ST_Assou)
+resultados_diferencial_IM_MP18_ST_Assou = topTable(fit_IM_MP18_ST_Assou, coef = 2, 
+                                                       number = Inf, adjust.method = "BH")
+
+genes_significativos_IM_MP18_ST_Assou = resultados_diferencial_IM_MP18_ST_Assou[
+  resultados_diferencial_IM_MP18_ST_Assou$adj.P.Val < 0.05 &
+    abs(resultados_diferencial_IM_MP18_ST_Assou$logFC) > 1, ]
+
+dim(genes_significativos_IM_MP18_ST_Assou)
+```
+
+```{r Análisis diferencial para la obtenicón de genes SCIE en la pareja IM_MP18_ST_Wong, echo = TRUE}
+
+pacientes_SCIE_IM_MP18_ST_Wong = df_SCIE_IM_MP18_ST_Wong$patient_key
+pacientes_control_IM_MP18_ST_Wong = df_control_IM_MP18_ST_Wong$patient_key
+
+pacientes_validos_IM_MP18_ST_Wong = intersect(c(pacientes_SCIE_IM_MP18_ST_Wong,
+                                                     pacientes_control_IM_MP18_ST_Wong),
+                                                   colnames(expr_datos_norm_tcga_2))
+
+expr_IM_MP18_ST_Wong = expr_datos_norm_tcga_2[, pacientes_validos_IM_MP18_ST_Wong]
+
+grupo_IM_MP18_ST_Wong = factor(ifelse(pacientes_validos_IM_MP18_ST_Wong %in%
+                        pacientes_SCIE_IM_MP18_ST_Wong, "SCIE", "Control"))
+
+orden_IM_MP18_ST_Wong = order(grupo_IM_MP18_ST_Wong)
+expr_IM_MP18_ST_Wong = expr_IM_MP18_ST_Wong[, orden_IM_MP18_ST_Wong]
+grupo_IM_MP18_ST_Wong = grupo_IM_MP18_ST_Wong[orden_IM_MP18_ST_Wong]
+
+design_IM_MP18_ST_Wong = model.matrix(~ grupo_IM_MP18_ST_Wong)
+fit_IM_MP18_ST_Wong= lmFit(expr_IM_MP18_ST_Wong, design_IM_MP18_ST_Wong)
+fit_IM_MP18_ST_Wong = eBayes(fit_IM_MP18_ST_Wong)
+resultados_diferencial_IM_MP18_ST_Wong = topTable(fit_IM_MP18_ST_Wong, coef = 2, 
+                                                       number = Inf, adjust.method = "BH")
+
+genes_significativos_IM_MP18_ST_Wong = resultados_diferencial_IM_MP18_ST_Wong[
+  resultados_diferencial_IM_MP18_ST_Wong$adj.P.Val < 0.05 &
+    abs(resultados_diferencial_IM_MP18_ST_Wong$logFC) > 1, ]
+
+dim(genes_significativos_IM_MP18_ST_Wong)
+```
+
+```{r Análisis diferencial para la obtenicón de genes SCIE en la pareja IM_MP18_ST_Plurinet, echo = TRUE}
+
+pacientes_SCIE_IM_MP18_ST_Plurinet = df_SCIE_IM_MP18_ST_Plurinet$patient_key
+pacientes_control_IM_MP18_ST_Plurinet = df_control_IM_MP18_ST_Plurinet$patient_key
+
+pacientes_validos_IM_MP18_ST_Plurinet = intersect(c(pacientes_SCIE_IM_MP18_ST_Plurinet,
+                                                     pacientes_control_IM_MP18_ST_Plurinet),
+                                                   colnames(expr_datos_norm_tcga_2))
+
+expr_IM_MP18_ST_Plurinet = expr_datos_norm_tcga_2[, pacientes_validos_IM_MP18_ST_Plurinet]
+
+grupo_IM_MP18_ST_Plurinet = factor(ifelse(pacientes_validos_IM_MP18_ST_Plurinet %in%
+                        pacientes_SCIE_IM_MP18_ST_Plurinet, "SCIE", "Control"))
+
+orden_IM_MP18_ST_Plurinet = order(grupo_IM_MP18_ST_Plurinet)
+expr_IM_MP18_ST_Plurinet = expr_IM_MP18_ST_Plurinet[, orden_IM_MP18_ST_Plurinet]
+grupo_IM_MP18_ST_Plurinet = grupo_IM_MP18_ST_Plurinet[orden_IM_MP18_ST_Plurinet]
+
+design_IM_MP18_ST_Plurinet = model.matrix(~ grupo_IM_MP18_ST_Plurinet)
+fit_IM_MP18_ST_Plurinet= lmFit(expr_IM_MP18_ST_Plurinet, design_IM_MP18_ST_Plurinet)
+fit_IM_MP18_ST_Plurinet = eBayes(fit_IM_MP18_ST_Plurinet)
+resultados_diferencial_IM_MP18_ST_Plurinet = topTable(fit_IM_MP18_ST_Plurinet, coef = 2, 
+                                                       number = Inf, adjust.method = "BH")
+
+genes_significativos_IM_MP18_ST_Plurinet = resultados_diferencial_IM_MP18_ST_Plurinet[
+  resultados_diferencial_IM_MP18_ST_Plurinet$adj.P.Val < 0.05 &
+    abs(resultados_diferencial_IM_MP18_ST_Plurinet$logFC) > 1, ]
+
+dim(genes_significativos_IM_MP18_ST_Plurinet)
+```
+
+```{r Recopilación de frecuencia de los genes significativos, echo = TRUE}
+
+nombres_variables_genes_sig = ls(pattern = "^genes_significativos_")
+
+lista_genes_significativos_comun = lapply(nombres_variables_genes_sig, function(nombre_var) {
+  df = get(nombre_var)
+  rownames(df)
+})
+
+tabla_frecuencia_genes_significativos = table(unlist(lista_genes_significativos_comun))
+
+tabla_frecuencia_genes_significativos = sort(tabla_frecuencia_genes_significativos, decreasing = TRUE)
+
+tabla_repeticiones_frecuencia_genes_significativos = as.data.frame(table(tabla_frecuencia_genes_significativos))
+colnames(tabla_repeticiones_frecuencia_genes_significativos) = c("Frecuencia", "Numero_de_genes")
+print(tabla_repeticiones_frecuencia_genes_significativos)
+```
+
+```{r Selección genes comunes a todas las listas para meta-firma, echo = TRUE}
+
+genes_metafirma = names(
+  tabla_frecuencia_genes_significativos[tabla_frecuencia_genes_significativos == 16])
+```
+
+```{r Matriz de expresión de los pacientes estudiados para la metafirma, echo = TRUE}
+
+pacientes_SCIE_metafirma = unique(unlist(lapply(ls(pattern = "^df_SCIE_"), function(n) get(n)$patient_key)))
+pacientes_control_metafirma = unique(unlist(lapply(ls(pattern = "^df_control_"), function(n) get(n)$patient_key)))
+
+#Se detectan los pacientes que están en ambos grupos, y se eliminan
+pacientes_solapados_metafirma = intersect(pacientes_SCIE_metafirma, pacientes_control_metafirma)
+
+pacientes_SCIE_metafirma_filtrados = setdiff(pacientes_SCIE_metafirma, pacientes_solapados_metafirma)
+pacientes_control_metafirma_filtrados = setdiff(pacientes_control_metafirma, pacientes_solapados_metafirma)
+
+
+pacientes_metafirma_completo = c(pacientes_SCIE_metafirma_filtrados, pacientes_control_metafirma_filtrados)
+
+etiquetas_metafirma_completo = factor(c(rep("SCIE", length(pacientes_SCIE_metafirma_filtrados)),
+                           rep("Control", length(pacientes_control_metafirma_filtrados))))
+
+expr_metafirma = expr_datos_norm_tcga_2[rownames(expr_datos_norm_tcga_2) %in% genes_metafirma, pacientes_metafirma_completo]
+
+expr_metafirma = expr_metafirma[, match(pacientes_metafirma_completo, colnames(expr_metafirma))]
+
+expr_metafirma_con_etiqueta = as.data.frame(t(expr_metafirma))
+expr_metafirma_con_etiqueta$etiqueta = factor(etiquetas_metafirma_completo)
+
+dim(expr_metafirma)  # genes/pacientes
+```
+
+```{r Generación de grupos train y test, echo = TRUE}
+set.seed(123)
+
+indices_barajados = sample(ncol(expr_metafirma)) #ya que están ordenados, hay q desordenados para coger misma cantidad de SCIE y control
+expr_metafirma_barajado = expr_metafirma[, indices_barajados]
+etiquetas_metafirma_barajado = etiquetas_metafirma_completo[indices_barajados]
+
+indice_train = createDataPartition(etiquetas_metafirma_barajado, p = 0.7, list = FALSE)
+
+expr_train = expr_metafirma_barajado[, indice_train]
+expr_test = expr_metafirma_barajado[, -indice_train]
+
+etiqueta_train = etiquetas_metafirma_barajado[indice_train]
+etiqueta_test = etiquetas_metafirma_barajado[-indice_train]
+
+```
+
+```{r RandomForest para la identificación del fenotipo SCIE y metafirma, echo = TRUE}
+set.seed(123)
+
+expr_train_t = as.data.frame(t(expr_train))
+expr_train_t$etiqueta = factor(etiqueta_train)
+expr_test_t = as.data.frame(t(expr_test))
+
+set.seed(123)
+modelo_randomforest = randomForest(etiqueta ~ ., data = expr_train_t, 
+                                   importance = TRUE, ntree = 500)
+
+
+```
+
+```{r Evaluación del modelo para el fenotipo SCIE RF, echo = TRUE}
+
+# Predicciones
+pred_clase_rf = predict(modelo_randomforest, newdata = expr_test_t)
+pred_prob_rf = predict(modelo_randomforest, newdata = expr_test_t, type = "prob")
+
+# Matriz de confusión
+matriz_confusion_rf = confusionMatrix(pred_clase_rf, factor(etiqueta_test), positive = "SCIE")
+print(matriz_confusion_rf)
+
+# Curva ROC y AUC
+roc_rf = roc(etiqueta_test, pred_prob_rf[, "SCIE"]) 
+auc_rf = auc(roc_rf)
+cat("AUC (Random Forest):", auc_rf, "\n")
+
+# Gráfico ROC
+plot(roc_rf, col = "darkgreen", lwd = 2, main = "Curva ROC - Modelo Random Forest")
+abline(a = 0, b = 1, lty = 2, col = "gray")
+```
+
+```{r Metafirma SCIE según importancia de genes RF, echo = TRUE}
+importancia_rf_genes_SCIE = importance(modelo_randomforest)
+importancia_rf_genes_SCIE_ordenado = importancia_rf_genes_SCIE[order(importancia_rf_genes_SCIE[, "MeanDecreaseGini"], decreasing = TRUE), ]
+head(importancia_rf_genes_SCIE_ordenado, 20)
+
+metafirma_rf_SCIE_100 = rownames(importancia_rf_genes_SCIE_ordenado)[1:100]
+metafirma_rf_SCIE_300 = rownames(importancia_rf_genes_SCIE_ordenado)[1:300]
+metafirma_rf_SCIE_600 = rownames(importancia_rf_genes_SCIE_ordenado)[1:600]
+metafirma_rf_SCIE_1000 = rownames(importancia_rf_genes_SCIE_ordenado)[1:1000]
+```
+
+```{r Guardar/Ejecutar Metafirma SCIE según importancia de genes RF, echo = TRUE}
+if (reinicio_sesion == FALSE) {
+  write.csv(importancia_rf_genes_SCIE_ordenado, "importancia_rf_genes_SCIE_ordenado.csv", row.names = TRUE)
+} 
+
+if (reinicio_sesion == TRUE) {
+  importancia_rf_genes_SCIE_ordenado = read.csv("importancia_rf_genes_SCIE_ordenado.csv")
+} 
+```
+
+```{r Cálculo GSVA metafirmas rf 100, echo = TRUE}
+dataframe_genes_metafirma_rf_100 = data.frame(Genes = metafirma_rf_SCIE_100)
+lista_genes_metafirma_rf_100_pre_gsva = list(Metafirma_RF_SCIE_100 = dataframe_genes_metafirma_rf_100$Genes)
+
+expr_metafirma_matrix = as.matrix(expr_metafirma)
+mode(expr_metafirma_matrix) = "numeric"
+
+gsva_param_metafirma_rf_100 = gsvaParam(expr_metafirma_matrix, lista_genes_metafirma_rf_100_pre_gsva)
+gsva_scores_metafirma_rf_100 = gsva(gsva_param_metafirma_rf_100)
+
+df_gsva_metafirma_rf_100 = data.frame(Sample = colnames(gsva_scores_metafirma_rf_100),
+                               GSVA_Score = as.numeric(gsva_scores_metafirma_rf_100[1, ]),
+                               Grupo = expr_metafirma_con_etiqueta[
+                                 colnames(gsva_scores_metafirma_rf_100), "etiqueta"])
+
+
+ggplot(df_gsva_metafirma_rf_100, aes(x = Grupo, y = GSVA_Score, fill = Grupo)) +
+  geom_boxplot(outlier.shape = NA, alpha = 0.7) +
+  geom_jitter(width = 0.2, alpha = 0.6) +
+  theme_minimal(base_size = 14) +
+  labs(title = "GSVA Score de la Metafirma RF con 100 genes",
+       x = "Grupo", y = "GSVA Score") +
+  scale_fill_brewer(palette = "Set2") +
+  theme(legend.position = "none") + 
+  stat_compare_means(method = "wilcox.test", label = "p.format")
+
+tabla_estad_gsva_metafirma_rf_100 = df_gsva_metafirma_rf_100 %>% group_by(Grupo) %>% summarise(
+    Media = mean(GSVA_Score),
+    Mediana = median(GSVA_Score),
+    SD = sd(GSVA_Score),
+    IQR = IQR(GSVA_Score),
+    Min = min(GSVA_Score),
+    Max = max(GSVA_Score),
+    .groups = "drop"
+  )
+
+roc_result_gsva_metafirma_rf_100 = roc(response = df_gsva_metafirma_rf_100$Grupo,
+                 predictor = df_gsva_metafirma_rf_100$GSVA_Score,
+                 levels = c("Control", "SCIE"),
+                 direction = "<")
+
+plot(roc_result_gsva_metafirma_rf_100, print.auc = TRUE, main = "Curva ROC - GSVA Score Metafirma RF de 100 genes")
+
+```
+
+```{r Cálculo GSVA metafirmas rf 300, echo = TRUE}
+dataframe_genes_metafirma_rf_300 = data.frame(Genes = metafirma_rf_SCIE_300)
+lista_genes_metafirma_rf_300_pre_gsva = list(Metafirma_RF_SCIE_300 = dataframe_genes_metafirma_rf_300$Genes)
+
+gsva_param_metafirma_rf_300 = gsvaParam(expr_metafirma_matrix, lista_genes_metafirma_rf_300_pre_gsva)
+gsva_scores_metafirma_rf_300 = gsva(gsva_param_metafirma_rf_300)
+
+df_gsva_metafirma_rf_300 = data.frame(Sample = colnames(gsva_scores_metafirma_rf_300),
+                               GSVA_Score = as.numeric(gsva_scores_metafirma_rf_300[1, ]),
+                               Grupo = expr_metafirma_con_etiqueta[
+                                 colnames(gsva_scores_metafirma_rf_300), "etiqueta"])
+
+
+ggplot(df_gsva_metafirma_rf_300, aes(x = Grupo, y = GSVA_Score, fill = Grupo)) +
+  geom_boxplot(outlier.shape = NA, alpha = 0.7) +
+  geom_jitter(width = 0.2, alpha = 0.6) +
+  theme_minimal(base_size = 14) +
+  labs(title = "GSVA Score de la Metafirma RF con 300 genes",
+       x = "Grupo", y = "GSVA Score") +
+  scale_fill_brewer(palette = "Set2") +
+  theme(legend.position = "none") + 
+  stat_compare_means(method = "wilcox.test", label = "p.format")
+
+tabla_estad_gsva_metafirma_rf_300 = df_gsva_metafirma_rf_300 %>% group_by(Grupo) %>% summarise(
+    Media = mean(GSVA_Score),
+    Mediana = median(GSVA_Score),
+    SD = sd(GSVA_Score),
+    IQR = IQR(GSVA_Score),
+    Min = min(GSVA_Score),
+    Max = max(GSVA_Score),
+    .groups = "drop"
+  )
+
+roc_result_gsva_metafirma_rf_300 = roc(response = df_gsva_metafirma_rf_300$Grupo,
+                 predictor = df_gsva_metafirma_rf_300$GSVA_Score,
+                 levels = c("Control", "SCIE"),
+                 direction = "<")
+
+plot(roc_result_gsva_metafirma_rf_300, print.auc = TRUE, main = "Curva ROC - GSVA Score Metafirma RF de 300 genes")
+```
+
+```{r Cálculo GSVA metafirmas rf 600, echo = TRUE}
+dataframe_genes_metafirma_rf_600 = data.frame(Genes = metafirma_rf_SCIE_600)
+lista_genes_metafirma_rf_600_pre_gsva = list(Metafirma_RF_SCIE_600 = dataframe_genes_metafirma_rf_600$Genes)
+
+gsva_param_metafirma_rf_600 = gsvaParam(expr_metafirma_matrix, lista_genes_metafirma_rf_600_pre_gsva)
+gsva_scores_metafirma_rf_600 = gsva(gsva_param_metafirma_rf_600)
+
+df_gsva_metafirma_rf_600 = data.frame(Sample = colnames(gsva_scores_metafirma_rf_600),
+                               GSVA_Score = as.numeric(gsva_scores_metafirma_rf_600[1, ]),
+                               Grupo = expr_metafirma_con_etiqueta[
+                                 colnames(gsva_scores_metafirma_rf_600), "etiqueta"])
+
+
+ggplot(df_gsva_metafirma_rf_600, aes(x = Grupo, y = GSVA_Score, fill = Grupo)) +
+  geom_boxplot(outlier.shape = NA, alpha = 0.7) +
+  geom_jitter(width = 0.2, alpha = 0.6) +
+  theme_minimal(base_size = 14) +
+  labs(title = "GSVA Score de la Metafirma RF con 600 genes",
+       x = "Grupo", y = "GSVA Score") +
+  scale_fill_brewer(palette = "Set2") +
+  theme(legend.position = "none") + 
+  stat_compare_means(method = "wilcox.test", label = "p.format")
+
+tabla_estad_gsva_metafirma_rf_600 = df_gsva_metafirma_rf_600 %>% group_by(Grupo) %>% summarise(
+    Media = mean(GSVA_Score),
+    Mediana = median(GSVA_Score),
+    SD = sd(GSVA_Score),
+    IQR = IQR(GSVA_Score),
+    Min = min(GSVA_Score),
+    Max = max(GSVA_Score),
+    .groups = "drop"
+  )
+
+roc_result_gsva_metafirma_rf_600 = roc(response = df_gsva_metafirma_rf_600$Grupo,
+                 predictor = df_gsva_metafirma_rf_600$GSVA_Score,
+                 levels = c("Control", "SCIE"),
+                 direction = "<")
+
+plot(roc_result_gsva_metafirma_rf_600, print.auc = TRUE, main = "Curva ROC - GSVA Score Metafirma RF de 600 genes")
+```
+
+```{r Cálculo GSVA metafirmas rf 1000, echo = TRUE}
+dataframe_genes_metafirma_rf_1000 = data.frame(Genes = metafirma_rf_SCIE_1000)
+lista_genes_metafirma_rf_1000_pre_gsva = list(Metafirma_RF_SCIE_1000 = dataframe_genes_metafirma_rf_1000$Genes)
+
+gsva_param_metafirma_rf_1000 = gsvaParam(expr_metafirma_matrix, lista_genes_metafirma_rf_1000_pre_gsva)
+gsva_scores_metafirma_rf_1000 = gsva(gsva_param_metafirma_rf_1000)
+
+df_gsva_metafirma_rf_1000 = data.frame(Sample = colnames(gsva_scores_metafirma_rf_1000),
+                               GSVA_Score = as.numeric(gsva_scores_metafirma_rf_1000[1, ]),
+                               Grupo = expr_metafirma_con_etiqueta[
+                                 colnames(gsva_scores_metafirma_rf_1000), "etiqueta"])
+
+
+ggplot(df_gsva_metafirma_rf_1000, aes(x = Grupo, y = GSVA_Score, fill = Grupo)) +
+  geom_boxplot(outlier.shape = NA, alpha = 0.7) +
+  geom_jitter(width = 0.2, alpha = 0.6) +
+  theme_minimal(base_size = 14) +
+  labs(title = "GSVA Score de la Metafirma RF con 1000 genes",
+       x = "Grupo", y = "GSVA Score") +
+  scale_fill_brewer(palette = "Set2") +
+  theme(legend.position = "none") + 
+  stat_compare_means(method = "wilcox.test", label = "p.format")
+
+tabla_estad_gsva_metafirma_rf_1000 = df_gsva_metafirma_rf_1000 %>% group_by(Grupo) %>% summarise(
+    Media = mean(GSVA_Score),
+    Mediana = median(GSVA_Score),
+    SD = sd(GSVA_Score),
+    IQR = IQR(GSVA_Score),
+    Min = min(GSVA_Score),
+    Max = max(GSVA_Score),
+    .groups = "drop"
+  )
+
+roc_result_gsva_metafirma_rf_1000 = roc(response = df_gsva_metafirma_rf_1000$Grupo,
+                 predictor = df_gsva_metafirma_rf_1000$GSVA_Score,
+                 levels = c("Control", "SCIE"),
+                 direction = "<")
+
+plot(roc_result_gsva_metafirma_rf_1000, print.auc = TRUE, main = "Curva ROC - GSVA Score Metafirma RF de 1000 genes")
+```
+
+
+```{r SVM para la identificación del fenotipo SCIE y metafirma, echo = TRUE}
+set.seed(123)
+ctrl_svm = trainControl(method = "cv", number = 5, 
+                    classProbs = TRUE, summaryFunction = twoClassSummary,
+                    savePredictions = "final")
+
+set.seed(123)
+modelo_svm_caret = train(etiqueta ~ ., data = expr_train_t, method = "svmLinear", metric = "ROC",
+                         trControl = ctrl_svm, preProcess = c("center", "scale"), tuneLength = 5)
+```
+
+```{r Evaluación del modelo para el fenotipo SCIE SVM, echo = TRUE}
+pred_svm_caret = predict(modelo_svm_caret, newdata = expr_test_t)
+pred_prob_svm_caret = predict(modelo_svm_caret, newdata = expr_test_t, type = "prob")
+
+# Matriz de confusión
+matriz_conf_svm_caret = confusionMatrix(pred_svm_caret, factor(etiqueta_test), positive = "SCIE")
+print(matriz_conf_svm_caret)
+
+#Curva ROC y AUC
+
+roc_svm_caret = roc(response = etiqueta_test, predictor = pred_prob_svm_caret[,"SCIE"])
+auc_svm_caret = auc(roc_svm_caret)
+cat("AUC (SVM caret):", auc_svm_caret, "\n")
+plot(roc_svm_caret, col = "blue", main = "Curva ROC - Modelo SVM lineal")
+abline(a = 0, b = 1, lty = 2, col = "gray")
+```
+
+
+```{r Metafirma SCIE según importancia de genes SVM, echo = TRUE}
+
+importancia_svm_genes_SCIE = varImp(modelo_svm_caret, scale = FALSE)
+importancia_svm_genes_SCIE_ordenado = importancia_svm_genes_SCIE$importance[order(importancia_svm_genes_SCIE$importance$SCIE, decreasing = TRUE), , drop = FALSE]
+head(importancia_svm_genes_SCIE_ordenado, 20)
+
+metafirma_svm_SCIE_100 = rownames(importancia_svm_genes_SCIE_ordenado)[1:100]
+metafirma_svm_SCIE_300 = rownames(importancia_svm_genes_SCIE_ordenado)[1:300]
+metafirma_svm_SCIE_600 = rownames(importancia_svm_genes_SCIE_ordenado)[1:600]
+metafirma_svm_SCIE_1000 = rownames(importancia_svm_genes_SCIE_ordenado)[1:1000]
+
+```
+
+
+```{r Comparación de rendimientos de modelos RF y SVM, echo = TRUE}
+
+#Valores RF
+conf_rf = matriz_confusion_rf$table
+VP_rf = conf_rf[2, 2]
+VN_rf = conf_rf[1, 1]
+FN_rf = conf_rf[1, 2]
+FP_rf = conf_rf[2, 1]
+
+#Valores SVM
+conf_svm = matriz_conf_svm_caret$table
+VP_svm = conf_svm[2, 2]
+VN_svm = conf_svm[1, 1]
+FN_svm = conf_svm[1, 2]
+FP_svm = conf_svm[2, 1]
+
+#Tabla comparativa
+comparacion_modelos_ML_pred = tibble(
+  Modelo = c("Random Forest", "SVM"),
+  Precision = c(matriz_confusion_rf$overall["Accuracy"],
+               matriz_conf_svm_caret$overall["Accuracy"]),
+  BalancedAccuracy = c(matriz_confusion_rf$byClass["Balanced Accuracy"],
+                       matriz_conf_svm_caret$byClass["Balanced Accuracy"]),
+  AUC = c(auc_rf, auc_svm_caret),
+  Kappa = c(matriz_confusion_rf$overall["Kappa"],
+            matriz_conf_svm_caret$overall["Kappa"]),
+  Sensibilidad = c(matriz_confusion_rf$byClass["Sensitivity"],
+                  matriz_conf_svm_caret$byClass["Sensitivity"]),
+  Especificidad = c(matriz_confusion_rf$byClass["Specificity"],
+                  matriz_conf_svm_caret$byClass["Specificity"]),
+  Ratio_FP = c(FP_rf / (FP_rf + VN_rf),
+               FP_svm / (FP_svm + VN_svm)),
+  Ratio_FN = c(FN_rf / (FN_rf + VP_rf),
+               FN_svm / (FN_svm + VP_svm))
+)
+
+print(comparacion_modelos_ML_pred)
+
+```
+
+```{r Gráfico comparativo de rendimientos de modelos RF y SVM, echo = TRUE}
+
+comparacion_modelos_ML_pred_formato_largo = comparacion_modelos_ML_pred %>%
+  pivot_longer(cols = -Modelo, names_to = "Metrica", values_to = "Valor") %>%
+  filter(!Metrica %in% c("Ratio_FP", "Ratio_FN"))
+
+# Gráfico de barras
+ggplot(comparacion_modelos_ML_pred_formato_largo, aes(x = Metrica, y = Valor, fill = Modelo)) +
+  geom_bar(stat = "identity", position = "dodge", width = 0.7) +
+  scale_fill_manual(values = c("Random Forest" = "#1b9e77", "SVM" = "#d95f02")) +
+  theme_minimal(base_size = 14) +
+  labs(
+    title = "Comparación de Desempeño: Random Forest vs SVM",
+    y = "Valor",
+    x = "Métrica"
+  ) +
+  geom_text(
+    aes(label = round(Valor, 3)),
+    position = position_dodge(width = 0.7),
+    vjust = -0.3,
+    size = 2.8
+  ) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+```{r Comparación curvas ROC y AUC entre modelos RF y SVM, echo = TRUE}
+
+plot(roc_rf, col = "darkgreen", lwd = 2, main = "Curva ROC - Comparación RF vs SVM")
+plot(roc_svm_caret, col = "blue", lwd = 2, add = TRUE)
+
+legend("bottomright",
+       legend = c(paste0("Random Forest (AUC = ", round(auc_rf, 3), ")"),
+                  paste0("SVM (AUC = ", round(auc_svm_caret, 3), ")")),
+       col = c("darkgreen", "blue"),
+       lwd = 2)
+abline(a = 0, b = 1, lty = 2, col = "gray")
+
+test_delong_comparacion_auc_rf_svm = roc.test(roc_rf, roc_svm_caret, method = "delong")
+print(test_delong_comparacion_auc_rf_svm)
+
+```
+
+
+```{r Comparación de metafirma SCIE según importancia de genes RF y SVM ENSEMBL, echo = TRUE}
+
+comparacion_importancia_rf_svm_genes_SCIE = data.frame(
+  Gen = intersect(rownames(importancia_rf_genes_SCIE_ordenado), rownames(importancia_svm_genes_SCIE_ordenado)),
+  RF_Importancia = importancia_rf_genes_SCIE_ordenado[intersect(rownames(importancia_rf_genes_SCIE_ordenado), rownames(importancia_svm_genes_SCIE_ordenado)), "MeanDecreaseGini"],
+  SVM_Importancia = importancia_svm_genes_SCIE_ordenado[intersect(rownames(importancia_rf_genes_SCIE_ordenado), rownames(importancia_svm_genes_SCIE_ordenado)), "SCIE"]
+)
+
+orden_rf = order(comparacion_importancia_rf_svm_genes_SCIE$RF_Importancia, decreasing = TRUE)
+top_genes_importancia = comparacion_importancia_rf_svm_genes_SCIE[orden_rf[1:100], ]
+
+ggplot(top_genes_importancia, aes(x = RF_Importancia, y = SVM_Importancia, label = Gen)) +
+  geom_point(color = "steelblue", size = 3) +
+  geom_text(hjust = 0, vjust = 1.1, size = 3) +
+  theme_minimal(base_size = 14) +
+  labs(
+    title = "Comparación de Importancia de Genes: Random Forest vs SVM",
+    x = "Importancia RF (MeanDecreaseGini)",
+    y = "Importancia SVM (Peso absoluto)"
+  )
+```
+
+```{r Comparación de metafirma SCIE según importancia de genes RF y SVM HGNC, echo = TRUE}
+reinicio_sesion = TRUE
+
+if (reinicio_sesion == FALSE) {
+  mart = useMart("ensembl", dataset = "hsapiens_gene_ensembl")
+  genes_ensembl_comparac_modelos = top_genes_importancia$Gen
+  
+  conversion_ensembl_a_hgnc = getBM(
+    attributes = c("ensembl_gene_id", "hgnc_symbol"),
+    filters = "ensembl_gene_id",
+    values = genes_ensembl_comparac_modelos,
+    mart = mart
+  )
+  write.csv(conversion_ensembl_a_hgnc, "conversion_ensembl_a_hgnc.csv", row.names = FALSE)
+}
+
+conversion_ensembl_a_hgnc = read.csv("conversion_ensembl_a_hgnc.csv")
+
+
+conversion_ensembl_a_hgnc = conversion_ensembl_a_hgnc[!duplicated(conversion_ensembl_a_hgnc$ensembl_gene_id), ]
+
+
+top_genes_importancia_cambio_nombre = merge(
+  top_genes_importancia,
+  conversion_ensembl_a_hgnc,
+  by.x = "Gen",
+  by.y = "ensembl_gene_id",
+  all.x = TRUE
+)
+
+top_genes_importancia_cambio_nombre$label = ifelse(
+  is.na(top_genes_importancia_cambio_nombre$hgnc_symbol),
+  top_genes_importancia_cambio_nombre$Gen,
+  top_genes_importancia_cambio_nombre$hgnc_symbol
+)
+
+metafirma_rf_SCIE_35_ensembl_hgnc = conversion_ensembl_a_hgnc %>% filter(ensembl_gene_id %in% metafirma_rf_SCIE_35)
+
+ggplot(top_genes_importancia_cambio_nombre, aes(x = RF_Importancia, y = SVM_Importancia, label = label)) +
+  geom_vline(xintercept = median(top_genes_importancia_cambio_nombre$RF_Importancia), color = "blue", linetype = "dashed", size = 0.4) +
+  geom_hline(yintercept = median(top_genes_importancia_cambio_nombre$SVM_Importancia), color = "blue", linetype = "dashed", size = 0.4) +
+  geom_point(color = "steelblue", size = 3) +
+  geom_text(hjust = 0, vjust = 1.1, size = 3) +
+  theme_minimal(base_size = 14) +
+  labs(
+    title = "Comparación de Importancia de Genes: Random Forest vs SVM",
+    x = "Importancia RF (MeanDecreaseGini)",
+    y = "Importancia SVM (Peso absoluto)"
+  )
+```
+
+
+```{r Heatmap comparación de metafirma SCIE según importancia de genes RF y SVM ENSEMBL, echo = TRUE}
+
+top_genes_heatmap = union(rownames(importancia_rf_genes_SCIE_ordenado)[1:50],
+                          rownames(importancia_svm_genes_SCIE_ordenado)[1:50])
+
+matriz_importancias = data.frame(
+  RF = importancia_rf_genes_SCIE_ordenado[top_genes_heatmap, "MeanDecreaseGini"],
+  SVM = importancia_svm_genes_SCIE_ordenado[top_genes_heatmap, "SCIE"]
+)
+rownames(matriz_importancias) = top_genes_heatmap
+
+pheatmap(
+  scale(matriz_importancias),
+  cluster_rows = FALSE, cluster_cols = FALSE,
+  display_numbers = FALSE,
+  main = "Importancia relativa de genes (top 50 RF y SVM)",
+  color = colorRampPalette(c("white", "orange", "darkred"))(100)
+)
+```
+
+```{r Heatmap comparación de metafirma SCIE según importancia de genes RF y SVM HGNC, echo = TRUE}
+
+top_genes_heatmap = union(rownames(importancia_rf_genes_SCIE_ordenado)[1:50],
+                          rownames(importancia_svm_genes_SCIE_ordenado)[1:50])
+
+matriz_importancias = data.frame(
+  RF = importancia_rf_genes_SCIE_ordenado[top_genes_heatmap, "MeanDecreaseGini"],
+  SVM = importancia_svm_genes_SCIE_ordenado[top_genes_heatmap, "SCIE"]
+)
+matriz_importancias$ensembl_gene_id = rownames(matriz_importancias)
+
+matriz_importancias = merge(
+  matriz_importancias,
+  conversion_ensembl_a_hgnc,
+  by = "ensembl_gene_id",
+  all.x = TRUE
+)
+
+matriz_importancias$label = ifelse(
+  is.na(matriz_importancias$hgnc_symbol),
+  matriz_importancias$ensembl_gene_id,
+  matriz_importancias$hgnc_symbol
+)
+
+rownames(matriz_importancias) = matriz_importancias$label
+
+matriz_importancias = matriz_importancias[, c("RF", "SVM")]
+
+pheatmap(
+  scale(matriz_importancias),
+  cluster_rows = FALSE, cluster_cols = FALSE,
+  display_numbers = FALSE,
+  main = "Importancia relativa de genes (top 50 RF y SVM)",
+  color = colorRampPalette(c("white", "orange", "darkred"))(100)
+)
+```
+
+```{r Optimización de la metafirma RF, echo = TRUE}
+
+resultados_list = list()
+genes_importancia_rf = rownames(importancia_rf_genes_SCIE_ordenado)
+rango_genes = seq(20, 180, by = 5)
+
+for (n in rango_genes) {
+  metafirma = genes_importancia_rf[1:n]
+  lista_metafirma = list(Metafirma = metafirma)
+  
+  param = gsvaParam(expr_metafirma_matrix, lista_metafirma)
+  scores = gsva(param)
+  
+  df_gsva = data.frame(
+    Sample = colnames(scores),
+    GSVA_Score = as.numeric(scores[1, ]),
+    Grupo = factor(expr_metafirma_con_etiqueta[colnames(scores), "etiqueta"], levels = c("Control", "SCIE"))
+  )
+  
+  roc_gsva = roc(response = df_gsva$Grupo,
+                  predictor = df_gsva$GSVA_Score,
+                  levels = c("Control", "SCIE"),
+                  direction = "<")
+  
+  resultados_list[[length(resultados_list) + 1]] = data.frame(NGenes = n, AUC = as.numeric(auc(roc_gsva)))
+}
+
+resultados_auc_optimizacion_rf = bind_rows(resultados_list)
+
+ggplot(resultados_auc_optimizacion_rf, aes(x = NGenes, y = AUC)) +
+  geom_line(color = "steelblue", size = 1.2) +
+  geom_point(size = 2) +
+  geom_point(
+    data = resultados_auc_optimizacion_rf[which.max(resultados_auc_optimizacion_rf$AUC),],
+    color = "red", size = 3) +
+  theme_minimal(base_size = 14) +
+  labs(
+    title = "Optimización del número de genes para GSVA",
+    x = "Número de genes en la metafirma",
+    y = "AUC"
+  )
+
+mejor_firma_optimizacion_rf = resultados_auc_optimizacion_rf[which.max(resultados_auc_optimizacion_rf$AUC), ]
+print(mejor_firma_optimizacion_rf)
+```
+
+```{r Optimización de la metafirma RF 2, echo = TRUE}
+
+set.seed(123)
+k_folds = 5
+rango_genes = seq(20, 180, by = 5)
+genes_importancia_rf = rownames(importancia_rf_genes_SCIE_ordenado)
+etiquetas_optmiz_rf = expr_metafirma_con_etiqueta[colnames(expr_metafirma_matrix), "etiqueta"]
+
+folds = caret::createFolds(etiquetas_optmiz_rf, k = k_folds, returnTrain = FALSE)
+
+resultados_optimiz_lista = list()
+
+for (n in rango_genes) {
+  aucs_optmiz = c()
+  
+  metafirma = genes_importancia_rf[1:n]
+  lista_metafirma = list(Metafirma = metafirma)
+  
+  for (fold in 1:k_folds) {
+    test_idx = folds[[fold]]
+    expr_test  = expr_metafirma_matrix[, test_idx, drop = FALSE]
+    etiquetas_optmiz_rf_test  = etiquetas_optmiz_rf[test_idx]
+    
+    param = gsvaParam(expr_test, lista_metafirma)
+    scores = gsva(param)
+    
+    df_gsva = data.frame(
+      Sample = colnames(scores),
+      GSVA_Score = as.numeric(scores[1, ]),
+      Grupo = factor(etiquetas_optmiz_rf_test, levels = c("Control", "SCIE"))
+    )
+    
+    roc_gsva = roc(response = df_gsva$Grupo,
+                    predictor = df_gsva$GSVA_Score,
+                    levels = c("Control", "SCIE"),
+                    direction = "<")
+    aucs_optmiz = c(aucs_optmiz, as.numeric(auc(roc_gsva)))
+  }
+  
+  resultados_optimiz_lista[[length(resultados_optimiz_lista) + 1]] = data.frame(
+    NGenes = n,
+    MeanAUC = mean(aucs_optmiz, na.rm=TRUE),
+    SdAUC = sd(aucs_optmiz, na.rm=TRUE)
+  )
+}
+
+resultados_optimiz_cv = bind_rows(resultados_optimiz_lista)
+
+ggplot(resultados_optimiz_cv, aes(x = NGenes, y = MeanAUC)) +
+  geom_line(color = "steelblue", size = 1.2) +
+  geom_point(size = 2) +
+  geom_point(
+    data = resultados_optimiz_cv[which.max(resultados_optimiz_cv$MeanAUC),],
+    color = "red", size = 3) +
+  geom_errorbar(aes(ymin = MeanAUC - SdAUC, ymax = MeanAUC + SdAUC), width = 2, alpha = 0.5) +
+  theme_minimal(base_size = 14) +
+  labs(
+    title = "AUC cross-validated por número de genes",
+    x = "Número de genes en la metafirma",
+    y = "AUC promedio"
+  )
+
+mejor_firma_optimizacion_rf_2 = resultados_optimiz_cv[which.max(resultados_optimiz_cv$MeanAUC), ]
+print(mejor_firma_optimizacion_rf_2)
+```
+
+```{r Cálculo GSVA metafirmas rf 35, echo = TRUE}
+
+metafirma_rf_SCIE_35 = rownames(importancia_rf_genes_SCIE_ordenado)[1:35]
+dataframe_genes_metafirma_rf_35 = data.frame(Genes = metafirma_rf_SCIE_35)
+lista_genes_metafirma_rf_35_pre_gsva = list(Metafirma_RF_SCIE_35 = dataframe_genes_metafirma_rf_35$Genes)
+
+
+gsva_param_metafirma_rf_35 = gsvaParam(expr_metafirma_matrix, lista_genes_metafirma_rf_35_pre_gsva)
+gsva_scores_metafirma_rf_35 = gsva(gsva_param_metafirma_rf_35)
+
+df_gsva_metafirma_rf_35 = data.frame(Paciente = colnames(gsva_scores_metafirma_rf_35),
+                               GSVA_Score = as.numeric(gsva_scores_metafirma_rf_35[1, ]),
+                               Grupo = expr_metafirma_con_etiqueta[
+                                 colnames(gsva_scores_metafirma_rf_35), "etiqueta"])
+
+
+ggplot(df_gsva_metafirma_rf_35, aes(x = Grupo, y = GSVA_Score, fill = Grupo)) +
+  geom_boxplot(outlier.shape = NA, alpha = 0.7) +
+  geom_jitter(width = 0.2, alpha = 0.6) +
+  theme_minimal(base_size = 14) +
+  labs(title = "GSVA Score de la Metafirma RF con 35 genes",
+       x = "Grupo", y = "GSVA Score") +
+  scale_fill_brewer(palette = "Set2") +
+  theme(legend.position = "none") + 
+  stat_compare_means(method = "wilcox.test", label = "p.format")
+
+tabla_estad_gsva_metafirma_rf_35 = df_gsva_metafirma_rf_35 %>% group_by(Grupo) %>% summarise(
+    Media = mean(GSVA_Score),
+    Mediana = median(GSVA_Score),
+    SD = sd(GSVA_Score),
+    IQR = IQR(GSVA_Score),
+    Min = min(GSVA_Score),
+    Max = max(GSVA_Score),
+    .groups = "drop"
+  )
+
+roc_result_gsva_metafirma_rf_35 = roc(response = df_gsva_metafirma_rf_35$Grupo,
+                 predictor = df_gsva_metafirma_rf_35$GSVA_Score,
+                 levels = c("Control", "SCIE"),
+                 direction = "<")
+
+plot(roc_result_gsva_metafirma_rf_35, print.auc = TRUE, main = "Curva ROC - GSVA Score Metafirma RF de 35 genes")
+
+```
+
+```{r Analisis de supervivencia con metafirma}
+
+clinical_df_metafirma_opt = data.frame(
+  Paciente = clinical_df_completo@listData$patient_key,
+  Tiempo = clinical_df_completo@listData$superviviencia_general,
+  Evento = as.numeric(clinical_df_completo@listData$fallecido)
+)
+
+
+df_supervivencia_metafirma_opt = merge(df_gsva_metafirma_rf_35, 
+                                       clinical_df_metafirma_opt, by = "Paciente")
+
+tercil_inf_gsva_metafirma_opt = quantile(df_supervivencia_metafirma_opt$GSVA_Score, probs = 1/3, na.rm = TRUE)
+tercil_sup_gsva_metafirma_opt = quantile(df_supervivencia_metafirma_opt$GSVA_Score, probs = 2/3, na.rm = TRUE)
+df_supervivencia_metafirma_opt$GSVA_group = with(df_supervivencia_metafirma_opt, 
+                                  ifelse(GSVA_Score <= tercil_inf_gsva_metafirma_opt, "Bajo",
+                                  ifelse(GSVA_Score > tercil_sup_gsva_metafirma_opt, "Alto", NA))
+)
+
+df_supervivencia_metafirma_opt$GSVA_group = factor(df_supervivencia_metafirma_opt$GSVA_group,
+  levels = c("Bajo", "Alto"))
+df_supervivencia_metafirma_opt$Grupo = factor(df_supervivencia_metafirma_opt$Grupo,
+  levels = c("Control", "SCIE"))
+
+
+surv_obj_metafirma_opt = Surv(
+  time = df_supervivencia_metafirma_opt$Tiempo, 
+  event = df_supervivencia_metafirma_opt$Evento
+)
+colores_GSVA_supv = c("Bajo" = "#377EB8", "Alto" = "#E41A1C") # For GSVA_group
+colores_grupo_supv = c("control" = "#377EB8", "SCIE" = "#E41A1C") # For Grupo
+
+fit_gsva_metafirma_opt = survfit(surv_obj_metafirma_opt ~ GSVA_group, data = df_supervivencia_metafirma_opt)
+plot_supervivencia_gsva_metafirma_opt = ggsurvplot(fit_gsva_metafirma_opt, data = df_supervivencia_metafirma_opt, pval = TRUE, 
+           risk.table = TRUE, title = "Supervivencia según GSVA Score de Metafirma")
+
+fit_grupo_metafirma_opt = survfit(surv_obj_metafirma_opt ~ Grupo, data = df_supervivencia_metafirma_opt)
+plot_supervivencia_grupo_metafirma_opt = ggsurvplot(fit_grupo_metafirma_opt, data = df_supervivencia_metafirma_opt, pval = TRUE,
+           risk.table = TRUE, title = "Supervivencia según Grupo Biológico")
+
+grid.arrange(plot_supervivencia_gsva_metafirma_opt$plot, plot_supervivencia_grupo_metafirma_opt$plot, ncol = 2)
+
+cox_fit_gsva_metafirma_opt = coxph(surv_obj_metafirma_opt ~ GSVA_Score, 
+                              data = df_supervivencia_metafirma_opt)
+summary(cox_fit_gsva_metafirma_opt)
+
+cox_fit_grupo_metafirma_opt = coxph(surv_obj_metafirma_opt ~ Grupo, 
+                              data = df_supervivencia_metafirma_opt)
+summary(cox_fit_grupo_metafirma_opt)
+```
+
+```{r Interpretacion biológica metafirma 35, echo = TRUE}
+
+metafirma_rf_SCIE_35_ensembl = metafirma_rf_SCIE_35
+
+#Obtencion de codigo ENTREZ_ID
+metafirma_35_entrez = mapIds(org.Hs.eg.db, keys = metafirma_rf_SCIE_35_ensembl, keytype = "ENSEMBL", column = "ENTREZID")
+metafirma_35_entrez = na.omit(metafirma_35_entrez)
+
+enrichgo_analysis_metafirma_35 = enrichGO(
+  gene          = metafirma_35_entrez,
+  OrgDb         = org.Hs.eg.db,
+  keyType       = "ENTREZID",
+  ont           = "BP",
+  pAdjustMethod = "BH",
+  qvalueCutoff  = 0.05,
+  readable      = TRUE
+)
+
+enrichpathway_analysis_metafirma_35 = enrichPathway(
+  gene          = metafirma_35_entrez,
+  organism      = "human",
+  pAdjustMethod = "BH",
+  qvalueCutoff  = 0.05,
+  readable      = TRUE
+)
+
+dotplot(enrichgo_analysis_metafirma_35, showCategory = 15, title = "GO Enrichment (BP) - Metafirma optimizada")
+
+cnetplot(enrichgo_analysis_metafirma_35, categorySize="pvalue", foldChange=NULL, showCategory = 5, circular = FALSE, colorEdge = TRUE, title = "GO Enrichment (BP) - Metafirma optimizada")
+
+dotplot(enrichpathway_analysis_metafirma_35, showCategory = 15, title = "Reactome Pathway Enrichment - Metafirma optimizada")
+cnetplot(enrichpathway_analysis_metafirma_35, categorySize="pvalue", foldChange=NULL, showCategory = 5, circular = FALSE, colorEdge = TRUE,title = "Reactome Pathway Enrichment - Metafirma optimizada")
+
+```
+
+```{r Interpretacion biológica metafirma 70, echo = TRUE}
+metafirma_rf_SCIE_70 = rownames(importancia_rf_genes_SCIE_ordenado)[1:70]
+
+metafirma_rf_SCIE_70_ensembl = metafirma_rf_SCIE_70
+
+#Obtencion de codigo ENTREZ_ID
+metafirma_70_entrez = mapIds(org.Hs.eg.db, keys = metafirma_rf_SCIE_70_ensembl, keytype = "ENSEMBL", column = "ENTREZID")
+metafirma_70_entrez = na.omit(metafirma_70_entrez)
+
+enrichgo_analysis_metafirma_70 = enrichGO(
+  gene          = metafirma_70_entrez,
+  OrgDb         = org.Hs.eg.db,
+  keyType       = "ENTREZID",
+  ont           = "BP",
+  pAdjustMethod = "BH",
+  qvalueCutoff  = 0.05,
+  readable      = TRUE
+)
+
+enrichpathway_analysis_metafirma_70 = enrichPathway(
+  gene          = metafirma_70_entrez,
+  organism      = "human",
+  pAdjustMethod = "BH",
+  qvalueCutoff  = 0.05,
+  readable      = TRUE
+)
+
+dotplot(enrichgo_analysis_metafirma_70, showCategory = 15, title = "GO Enrichment (BP)") + theme(plot.margin = ggplot2::margin(5, 5, 5, 80), axis.text.y = element_text(size=9))
+
+cnetplot(enrichgo_analysis_metafirma_70, categorySize="pvalue", foldChange=NULL, showCategory = 5, circular = FALSE, colorEdge = TRUE)
+
+
+dotplot(enrichpathway_analysis_metafirma_70, showCategory = 15, title = "Reactome Pathway Enrichment") + theme(plot.margin = ggplot2::margin(5, 5, 5, 80), axis.text.y = element_text(size=9))
+
+cnetplot(enrichpathway_analysis_metafirma_70, categorySize="pvalue", foldChange=NULL, showCategory = 5, circular = FALSE, colorEdge = TRUE)
+```
+
+```{r Interpretacion biológica metafirma 100, echo = TRUE}
+metafirma_rf_SCIE_100_ensembl = metafirma_rf_SCIE_100
+
+#Obtencion de codigo ENTREZ_ID
+metafirma_100_entrez = mapIds(org.Hs.eg.db, keys = metafirma_rf_SCIE_100_ensembl, keytype = "ENSEMBL", column = "ENTREZID")
+metafirma_100_entrez = na.omit(metafirma_100_entrez)
+
+enrichgo_analysis_metafirma_100 = enrichGO(
+  gene          = metafirma_100_entrez,
+  OrgDb         = org.Hs.eg.db,
+  keyType       = "ENTREZID",
+  ont           = "BP",
+  pAdjustMethod = "BH",
+  qvalueCutoff  = 0.05,
+  readable      = TRUE
+)
+
+enrichpathway_analysis_metafirma_100 = enrichPathway(
+  gene          = metafirma_100_entrez,
+  organism      = "human",
+  pAdjustMethod = "BH",
+  qvalueCutoff  = 0.05,
+  readable      = TRUE
+)
+
+dotplot(enrichgo_analysis_metafirma_100, showCategory = 15, title = "GO Enrichment (BP)") + theme(plot.margin = ggplot2::margin(5, 5, 5, 80), axis.text.y = element_text(size=9))
+
+cnetplot(enrichgo_analysis_metafirma_100, categorySize="pvalue", foldChange=NULL, showCategory = 5, circular = FALSE, colorEdge = TRUE)
+
+# Dotplot for Reactome Pathways
+dotplot(enrichpathway_analysis_metafirma_100, showCategory = 15, title = "Reactome Pathway Enrichment") + theme(plot.margin = ggplot2::margin(5, 5, 5, 80), axis.text.y = element_text(size=9))
+
+# Cnetplot for Reactome Pathways
+cnetplot(enrichpathway_analysis_metafirma_100, categorySize="pvalue", foldChange=NULL, showCategory = 5, circular = FALSE, colorEdge = TRUE)
+```
+
+```{r Interpretacion biológica metafirma 35 Ampliacion ShowCategory, echo = TRUE}
+
+dotplot(enrichgo_analysis_metafirma_35, showCategory = 30, title = "GO Enrichment (BP)") + theme(plot.margin = ggplot2::margin(5, 80, 5, 80), axis.text.y = element_text(size=9))
+
+cnetplot(enrichgo_analysis_metafirma_35, categorySize="pvalue", foldChange=NULL, showCategory = 15, circular = FALSE, colorEdge = TRUE)
+
+dotplot(enrichpathway_analysis_metafirma_35, showCategory = 30, title = "Reactome Pathway Enrichment - Metafirma optimizada")
+cnetplot(enrichpathway_analysis_metafirma_35, categorySize="pvalue", foldChange=NULL, showCategory = 15, circular = FALSE, colorEdge = TRUE)
+
+```
+
+
+```{r Busqueda terminos inmunologicos en Interpretacion biológica metafirma 35, echo = TRUE}
+palabras_clave_inmuno = "immune|immun|inflamm|cytokine|defense|leukocyte|lymphocyte|macrophage|neutrophil|monocyte|T cell|B cell|antigen|antibody|complement|interleukin|interferon|chemokine"
+
+
+enrichgo_35_palabras_inmuno = enrichgo_analysis_metafirma_35@result[
+  grep(palabras_clave_inmuno, enrichgo_analysis_metafirma_35@result$Description, ignore.case = TRUE),
+]
+enrichgo_35_palabras_inmuno_ordenado = enrichgo_35_palabras_inmuno[order(enrichgo_35_palabras_inmuno$Count, decreasing = TRUE), ]
+
+print(enrichgo_35_palabras_inmuno_ordenado[, c("geneID", "Count", "Description")])
+
+enrichpathway_35_palabras_inmuno = enrichpathway_analysis_metafirma_35@result[
+  grep(palabras_clave_inmuno, enrichpathway_analysis_metafirma_35@result$Description, ignore.case = TRUE),
+]
+enrichpathway_35_palabras_inmuno_ordenado = enrichpathway_35_palabras_inmuno[order(enrichpathway_35_palabras_inmuno$Count, decreasing = TRUE), ]
+print(enrichpathway_35_palabras_inmuno_ordenado[, c("geneID", "Count", "Description")])
+```
+
+```{r Interpretacion biológica proteínas (STRING), echo = TRUE}
+
+string_db = STRINGdb$new(version = "12.0", species = 9606, score_threshold = 400, input_directory = "")
+
+metafirma_35_entrez_character = as.character(metafirma_35_entrez)
+
+metafirma_35_entrez_df = data.frame(ENTREZID = metafirma_35_entrez_character, stringsAsFactors = FALSE)
+metafirma_35_entrez_map = string_db$map(metafirma_35_entrez_df, "ENTREZID", removeUnmappedRows = TRUE)
+head(metafirma_35_entrez_map)
+
+string_network = string_db$get_subnetwork(metafirma_35_entrez_map$STRING_id)
+
+string_db$plot_network(metafirma_35_entrez_map$STRING_id)
+
+string_tabla = string_db$get_interactions(metafirma_35_entrez_map$STRING_id)
+head(string_tabla)
+```
+
+
+
+
